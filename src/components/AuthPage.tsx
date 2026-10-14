@@ -15,6 +15,8 @@ import { useState, useCallback } from 'react';
 import { Music, Eye, EyeOff, ArrowRight, ArrowLeft, Check, AlertCircle, Loader2, Mail, Lock, User, Calendar } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
+import { saveConsent } from '@/lib/profileService';
+import { loadConsent } from '@/components/CookieConsent';
 import {
   validateEmail, validatePassword, validateFullName, validateAge,
 } from '@/lib/validation';
@@ -105,7 +107,30 @@ export function AuthPage({ initialMode = 'login', onSuccess, onSwitchMode }: Aut
       return;
     }
 
-    setSuccess('Account created! Please check your email to verify your account before signing in.');
+    // Persist consent to the database if the session was created immediately
+    // (Supabase may return a session without email confirmation enabled)
+    if (supabase) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        const cookieConsent = loadConsent();
+        await saveConsent({
+          termsVersion: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION,
+          cookieConsent: cookieConsent ? { ...cookieConsent } : undefined,
+        });
+      }
+    }
+
+    // Store consent locally so it can be synced after login if needed
+    try {
+      localStorage.setItem('vocalis-pending-consent', JSON.stringify({
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch { /* ignore */ }
+
+    setSuccess('Account created! You can now sign in with your email and password.');
   }, [fullName, email, password, confirmPassword, age, agreeTerms, ackPrivacy, signUp]);
 
   const handleLogin = useCallback(async () => {
@@ -286,11 +311,12 @@ export function AuthPage({ initialMode = 'login', onSuccess, onSwitchMode }: Aut
                   type="checkbox"
                   checked={agreeTerms}
                   onChange={(e) => setAgreeTerms(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-cream-400 text-sage-deep focus:ring-sage-DEFAULT"
+                  className="mt-0.5 h-4 w-4 rounded border-cream-400 text-sage-deep focus:ring-sage"
+                  aria-label="I accept the Terms of Service"
                 />
                 <span className="text-sm text-charcoal-light">
                   I accept the{' '}
-                  <a href="/terms" target="_blank" className="text-sage-deep underline hover:text-sage-dark">Terms of Service</a>
+                  <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('vocalis-navigate', { detail: 'terms' }))} className="text-sage-deep underline hover:text-sage-dark">Terms of Service</button>
                 </span>
               </label>
 
@@ -299,11 +325,12 @@ export function AuthPage({ initialMode = 'login', onSuccess, onSwitchMode }: Aut
                   type="checkbox"
                   checked={ackPrivacy}
                   onChange={(e) => setAckPrivacy(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-cream-400 text-sage-deep focus:ring-sage-DEFAULT"
+                  className="mt-0.5 h-4 w-4 rounded border-cream-400 text-sage-deep focus:ring-sage"
+                  aria-label="I acknowledge the Privacy Policy"
                 />
                 <span className="text-sm text-charcoal-light">
                   I acknowledge the{' '}
-                  <a href="/privacy" target="_blank" className="text-sage-deep underline hover:text-sage-dark">Privacy Policy</a>
+                  <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('vocalis-navigate', { detail: 'privacy' }))} className="text-sage-deep underline hover:text-sage-dark">Privacy Policy</button>
                 </span>
               </label>
 

@@ -54,6 +54,17 @@ function App() {
     }
   }, []);
 
+  // Listen for navigation events from child components (e.g. legal links in auth)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail === 'terms') setView('terms');
+      if (detail === 'privacy') setView('privacy');
+    };
+    window.addEventListener('vocalis-navigate', handler);
+    return () => window.removeEventListener('vocalis-navigate', handler);
+  }, []);
+
   // Determine view: auth > onboarding > app
   // If user is not onboarded and we're not showing auth/legal, show onboarding
   useEffect(() => {
@@ -277,7 +288,7 @@ function App() {
       </button>
 
       {/* Settings modal */}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} onShowRangeChecker={() => { setShowSettings(false); setShowRangeChecker(true); }} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} onShowRangeChecker={() => { setShowSettings(false); setShowRangeChecker(true); }} onSignOut={() => { setView('auth'); setAuthMode('login'); }} />}
 
       {/* Pitch Pipe drawer */}
       <PitchPipe isOpen={showPitchPipe} onClose={() => setShowPitchPipe(false)} />
