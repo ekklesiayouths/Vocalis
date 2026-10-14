@@ -104,6 +104,24 @@ export function ChoirSpace() {
     setLoading(true);
     setError(null);
     try {
+      // No Supabase configured — use local fallback
+      if (!supabase) {
+        setUsingLocalFallback(true);
+        const local = loadLocalChoirs();
+        const allChoirs: Choir[] = local.map((lc) => ({
+          id: lc.id,
+          name: lc.name,
+          description: lc.description,
+          invite_code: lc.invite_code,
+          director_id: lc.role === 'director' ? 'local' : '',
+        }));
+        const roleMap: Record<string, 'member' | 'director'> = {};
+        local.forEach((lc) => { roleMap[lc.id] = lc.role; });
+        setChoirs(allChoirs);
+        setMemberships(roleMap);
+        return;
+      }
+
       // Check if user is authenticated with Supabase
       const { data: sessionData } = await supabase.auth.getSession();
 

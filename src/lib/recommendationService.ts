@@ -74,6 +74,15 @@ const MIN_TOTAL_SCORES = 30;
  */
 export async function checkDataSufficiency(): Promise<DataSufficiencyReport> {
   try {
+    if (!supabase) {
+      return {
+        sufficient: false,
+        totalUsers: 0,
+        totalScores: 0,
+        avgScoresPerUser: 0,
+        reason: 'Not signed in.',
+      };
+    }
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
       return {
@@ -122,6 +131,7 @@ export async function checkDataSufficiency(): Promise<DataSufficiencyReport> {
  */
 async function getModelRecommendations(): Promise<Recommendation[] | null> {
   try {
+    if (!supabase) return null;
     const { data: activeModel } = await supabase
       .from('model_versions')
       .select('id, version, evaluation_metrics')

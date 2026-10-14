@@ -44,6 +44,7 @@ export interface AttemptSubmissionResult {
  * Returns null if the user is not signed in (no auth session).
  */
 export async function getProgress(): Promise<ProgressSummary | null> {
+  if (!supabase) return null;
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) return null;
 
@@ -105,6 +106,7 @@ export async function submitAttempt(
   pitchMatchRatio?: number,
   metadata?: Record<string, unknown>
 ): Promise<AttemptSubmissionResult> {
+  if (!supabase) return { success: false, error: 'Not signed in' };
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) {
     return { success: false, error: 'Not signed in' };

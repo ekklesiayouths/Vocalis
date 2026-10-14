@@ -54,6 +54,9 @@ export function TutorChat({ context }: TutorChatProps) {
     setRateLimited(false);
 
     try {
+      if (!supabase) {
+        throw new Error('Please sign in to chat with your vocal coach.');
+      }
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
 

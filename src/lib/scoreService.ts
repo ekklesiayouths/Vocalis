@@ -30,6 +30,7 @@ export async function submitScore(
   accuracy: number,
   timeElapsedSeconds: number
 ): Promise<ScoreSubmissionResult> {
+  if (!supabase) return { success: false, error: 'Not signed in' };
   const moduleCheck = validateModuleName(moduleName);
   if (!moduleCheck.valid) {
     return { success: false, error: moduleCheck.error };

@@ -108,6 +108,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
+        if (!supabase) return;
         const { data: sessionData } = await supabase.auth.getSession();
         if (!sessionData.session || cancelled) return;
 
