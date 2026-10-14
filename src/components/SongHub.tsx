@@ -153,6 +153,19 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     setLoading(true);
     setError(null);
     try {
+      if (!supabase) {
+        setUsingLocalFallback(true);
+        const local = loadLocalSongs(choirId);
+        setChoirSongs(local.map((s) => ({
+          id: s.id, title: s.title, pedagogical_focus: null, lyrics: s.lyrics,
+          audio_path: s.local_audio_url ?? null, processing_status: s.processing_status ?? 'completed',
+          processing_error: null, lyrics_verified: s.lyrics_verified ?? true,
+          melody_verified: s.melody_verified ?? false, confirmed_key: s.confirmed_key ?? null,
+          tonic_solfa: s.tonic_solfa ?? null, created_at: s.created_at,
+        })));
+        return;
+      }
+      if (!supabase) { setChoirSongs([]); return; }
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         setUsingLocalFallback(true);
@@ -235,6 +248,12 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     setPendingAudioUrl(objUrl);
 
     try {
+      if (!supabase) {
+        setUsingLocalFallback(true);
+        setPendingStoragePath(null);
+        await runAutoDraft(file, songId, file.name.replace(/\.[^/.]+$/, ''), '');
+        return;
+      }
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         setUsingLocalFallback(true);
@@ -315,34 +334,39 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
 
     if (title.trim().length > 0) {
       try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData.session && !usingLocalFallback) {
-        const { data: responseData, error: fnError } = await supabase.functions
-          .invoke('song-analyze', {
-            body: { songId, title, artist },
-          });
+        if (!supabase || usingLocalFallback) {
+          draftResult.lyricsStatus = 'not_found';
+          draftResult.lyricsMessage = 'Sign in to search for lyrics online. You can enter lyrics manually.';
+        } else {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData.session) {
+            const { data: responseData, error: fnError } = await supabase.functions
+              .invoke('song-analyze', {
+                body: { songId, title, artist },
+              });
 
-        if (fnError) {
-          draftResult.lyricsStatus = 'error';
-          draftResult.lyricsMessage = `Lyrics search failed: ${fnError.message}`;
-        } else if (responseData) {
-          if (responseData.status === 'lyrics_found' && responseData.lyrics) {
-            draftResult.lyrics = responseData.lyrics;
-            draftResult.lyricsSource = responseData.lyricsSource;
-            draftResult.lyricsStatus = 'found';
-            draftResult.lyricsMessage = responseData.message || 'Lyrics found. Review and approve.';
-          } else if (responseData.status === 'lyrics_not_found') {
+            if (fnError) {
+              draftResult.lyricsStatus = 'error';
+              draftResult.lyricsMessage = `Lyrics search failed: ${fnError.message}`;
+            } else if (responseData) {
+              if (responseData.status === 'lyrics_found' && responseData.lyrics) {
+                draftResult.lyrics = responseData.lyrics;
+                draftResult.lyricsSource = responseData.lyricsSource;
+                draftResult.lyricsStatus = 'found';
+                draftResult.lyricsMessage = responseData.message || 'Lyrics found. Review and approve.';
+              } else if (responseData.status === 'lyrics_not_found') {
+                draftResult.lyricsStatus = 'not_found';
+                draftResult.lyricsMessage = responseData.message || 'Lyrics not found. Enter them manually.';
+              } else if (responseData.status === 'needs_input') {
+                draftResult.lyricsStatus = 'not_found';
+                draftResult.lyricsMessage = responseData.message || 'Enter a title to search for lyrics.';
+              }
+            }
+          } else {
             draftResult.lyricsStatus = 'not_found';
-            draftResult.lyricsMessage = responseData.message || 'Lyrics not found. Enter them manually.';
-          } else if (responseData.status === 'needs_input') {
-            draftResult.lyricsStatus = 'not_found';
-            draftResult.lyricsMessage = responseData.message || 'Enter a title to search for lyrics.';
+            draftResult.lyricsMessage = 'Sign in to search for lyrics online. You can enter lyrics manually.';
           }
         }
-      } else {
-        draftResult.lyricsStatus = 'not_found';
-        draftResult.lyricsMessage = 'Sign in to search for lyrics online. You can enter lyrics manually.';
-      }
       } catch (err) {
         draftResult.lyricsStatus = 'error';
         draftResult.lyricsMessage = `Lyrics search error: ${err instanceof Error ? err.message : 'unknown'}`;
@@ -369,6 +393,11 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     setAnalyzeProgress('Searching for lyrics...');
 
     try {
+      if (!supabase) {
+        setError('Sign in to search for lyrics online.');
+        setAnalyzeProgress('');
+        return;
+      }
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         setError('Sign in to search for lyrics online.');
@@ -455,6 +484,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     }
 
     try {
+      if (!supabase) throw new Error('Not connected');
       const { error: insertError } = await supabase
         .from('choir_songs')
         .insert({
@@ -519,6 +549,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
       return;
     }
     try {
+      if (!supabase) throw new Error('Not connected');
       if (audioPath) await supabase.storage.from('choir-audio').remove([audioPath]);
       const { error: deleteError } = await supabase.from('choir_songs').delete().eq('id', songId);
       if (deleteError) throw deleteError;
@@ -545,6 +576,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     }
     if (!song.audio_path) { setError('Audio file not available.'); return; }
     try {
+      if (!supabase) throw new Error('Not connected');
       const { data, error: urlError } = await supabase.storage
         .from('choir-audio').createSignedUrl(song.audio_path, 3600);
       if (urlError || !data) throw urlError;
@@ -596,6 +628,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
       return;
     }
     try {
+      if (!supabase) throw new Error('Not connected');
       const { error: updateError } = await supabase
         .from('choir_songs')
         .update({

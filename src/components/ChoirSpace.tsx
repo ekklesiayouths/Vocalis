@@ -209,6 +209,7 @@ export function ChoirSpace() {
   const loadChoirMembers = useCallback(async (choirId: string) => {
     setMembersLoading(true);
     try {
+      if (!supabase) { setChoirMembers([]); return; }
       const { data, error: membersError } = await supabase
         .from('choir_memberships')
         .select('id, user_id, role')
@@ -260,11 +261,8 @@ export function ChoirSpace() {
     setError(null);
 
     // Check if user is authenticated with Supabase
-    const { data: sessionData } = await supabase.auth.getSession();
-
-    if (!sessionData.session) {
-      // No authenticated session — use local fallback
-      console.warn('DB write failed, falling back to local session state: no authenticated session');
+    if (!supabase) {
+      // No Supabase configured — use local fallback
       const localChoir: LocalChoir = {
         id: 'local-' + Date.now(),
         name: cleanName,
@@ -380,6 +378,10 @@ export function ChoirSpace() {
     }
 
     try {
+      if (!supabase) {
+        setError('Choir features require sign-in. Try creating a choir instead.');
+        return;
+      }
       const { data: choir, error: findError } = await supabase
         .from('choirs')
         .select('id, name, description, invite_code, director_id')
