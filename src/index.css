@@ -63,6 +63,13 @@
            transition-all duration-150 hover:bg-mustard-dark hover:shadow-paper
            active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
   }
+
+  /* Auth form inputs */
+  .auth-input {
+    @apply w-full rounded-xl bg-cream-50 border border-cream-400 px-4 py-3 text-charcoal
+           outline-none transition-colors
+           focus:border-sage focus:ring-2 focus:ring-sage/20;
+  }
 }
 
 @layer utilities {

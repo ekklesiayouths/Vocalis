@@ -1,19 +1,18 @@
 /**
  * Main application component — Vocalis.
- * Whimsical notebook design with warm, organic styling.
- *
- * SECURITY:
- * - Navigation state is purely client-side. No user input from navigation
- *   is sent to the database. All text rendered via React JSX.
- * - Onboarding gate uses UserContext (localStorage) — no server calls.
- * - Settings panel MD toggle is client-side UI only — no server permissions.
- * - Choir Workspace uses existing Supabase RLS policies for any DB operations.
+ * Handles auth routing, onboarding gate, legal pages, and main app navigation.
  */
 
-import { useState } from 'react';
-import { Mic, GraduationCap, Gamepad2, Users, Music, Settings as SettingsIcon, Crown, Map, Piano, Music2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mic, GraduationCap, Gamepad2, Users, Music, Settings as SettingsIcon, Crown, Map, Piano, Music2, LogOut, FileText, Shield } from 'lucide-react';
 import { useUser } from '@/context/UserContext';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
 import { Onboarding } from '@/components/Onboarding';
+import { EnhancedOnboarding } from '@/components/EnhancedOnboarding';
+import { AuthPage } from '@/components/AuthPage';
+import { TermsPage, PrivacyPage } from '@/components/LegalPages';
+import { CookieConsent } from '@/components/CookieConsent';
 import { WarmUpDashboard } from '@/components/WarmUpDashboard';
 import { AcademyDashboard } from '@/components/AcademyDashboard';
 import { Playground } from '@/components/Playground';
@@ -25,25 +24,81 @@ import { PitchPipe } from '@/components/PitchPipe';
 import { VocalRangeChecker } from '@/components/VocalRangeChecker';
 
 type AppMode = 'warmup' | 'map' | 'academy' | 'playground' | 'choir';
+type AppView = 'auth' | 'onboarding' | 'app' | 'terms' | 'privacy';
 
 interface NavItem {
   mode: AppMode;
   label: string;
   icon: typeof Mic;
-  requiresMD?: boolean;
 }
 
 function App() {
   const { profile } = useUser();
+  const { session, loading, signOut } = useAuth();
+  const [view, setView] = useState<AppView>('app');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
   const [activeMode, setActiveMode] = useState<AppMode>('map');
   const [showSettings, setShowSettings] = useState(false);
   const [showPiano, setShowPiano] = useState(false);
   const [showPitchPipe, setShowPitchPipe] = useState(false);
   const [showRangeChecker, setShowRangeChecker] = useState(false);
 
+  // Check URL for auth redirect (password reset, email verification)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const hash = window.location.hash;
+    if (mode === 'reset' || hash.includes('type=recovery')) {
+      setAuthMode('reset');
+      setView('auth');
+    }
+  }, []);
+
+  // Determine view: auth > onboarding > app
+  // If user is not onboarded and we're not showing auth/legal, show onboarding
+  useEffect(() => {
+    if (loading) return;
+    if (view === 'terms' || view === 'privacy') return;
+    if (!profile.onboarded && view !== 'auth') {
+      setView('onboarding');
+    }
+  }, [profile.onboarded, loading, view]);
+
+  // Handle auth success
+  const handleAuthSuccess = () => {
+    // After login or "continue without account", go to app
+    if (!profile.onboarded) {
+      setView('onboarding');
+    } else {
+      setView('app');
+    }
+  };
+
+  // Show auth page
+  if (view === 'auth') {
+    return (
+      <>
+        <AuthPage
+          initialMode={authMode}
+          onSuccess={handleAuthSuccess}
+          onSwitchMode={(m) => setAuthMode(m)}
+        />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  // Legal pages
+  if (view === 'terms') {
+    return <TermsPage onBack={() => setView(profile.onboarded ? 'app' : 'auth')} />;
+  }
+  if (view === 'privacy') {
+    return <PrivacyPage onBack={() => setView(profile.onboarded ? 'app' : 'auth')} />;
+  }
+
   // Onboarding gate
   if (!profile.onboarded) {
-    return <Onboarding />;
+    return <EnhancedOnboarding onComplete={() => setView('app')} />;
   }
 
   const navItems: NavItem[] = [
@@ -65,7 +120,9 @@ function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold leading-tight text-charcoal">Vocalis</h1>
-              <p className="text-xs text-charcoal-muted">Hi, {profile.displayName}!</p>
+              <p className="text-xs text-charcoal-muted">
+                Hi, {profile.displayName}!{session && <span className="text-sage-deep"> · Signed in</span>}
+              </p>
             </div>
           </div>
 
@@ -81,6 +138,22 @@ function App() {
                 className="hidden items-center gap-1.5 rounded-xl bg-sage-light border border-sage-DEFAULT px-2.5 py-1.5 text-xs font-medium text-sage-deep sm:flex transition-all hover:bg-sage-DEFAULT hover:text-cream-50"
               >
                 <Music2 className="h-3.5 w-3.5" /> {profile.vocalRange.classification}
+              </button>
+            )}
+            {session ? (
+              <button
+                onClick={() => { signOut(); setView('auth'); setAuthMode('login'); }}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-cream-200 border border-cream-400 text-charcoal-muted transition-all hover:bg-cream-300 hover:text-charcoal active:translate-y-0.5"
+                title="Sign out"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => { setAuthMode('login'); setView('auth'); }}
+                className="flex items-center gap-1.5 rounded-xl bg-sage-light border border-sage-DEFAULT px-3 py-1.5 text-xs font-medium text-sage-deep transition-all hover:bg-sage-DEFAULT hover:text-cream-50"
+              >
+                Sign in
               </button>
             )}
             <button
@@ -181,8 +254,16 @@ function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer with legal links */}
       <footer className="border-t border-cream-400 py-6 text-center text-xs text-charcoal-muted">
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-2">
+          <button onClick={() => setView('terms')} className="flex items-center gap-1 hover:text-sage-deep">
+            <FileText className="h-3 w-3" /> Terms
+          </button>
+          <button onClick={() => setView('privacy')} className="flex items-center gap-1 hover:text-sage-deep">
+            <Shield className="h-3 w-3" /> Privacy
+          </button>
+        </div>
         Vocalis — All audio processed locally. No microphone data is stored or transmitted.
       </footer>
 
