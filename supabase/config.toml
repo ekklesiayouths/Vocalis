@@ -1,0 +1,8 @@
+[functions.ai-tutor]
+verify_jwt = true
+
+[functions.train-recommendations]
+verify_jwt = true
+
+[functions.song-analyze]
+verify_jwt = true

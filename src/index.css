@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-cream-100 text-charcoal font-sans;
+    background-image:
+      radial-gradient(ellipse at top, rgba(232, 197, 71, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom, rgba(168, 201, 160, 0.06) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Organic card with paper-cutout shadow */
+  .card {
+    @apply bg-cream-50 rounded-2xl border border-cream-400 shadow-paper transition-all duration-200;
+  }
+  .card-hover {
+    @apply card hover:shadow-paper-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-paper-sm;
+  }
+  .card-dashed {
+    @apply bg-cream-50 rounded-2xl border-2 border-dashed border-cream-400 shadow-paper-sm transition-all duration-200;
+  }
+  .card-dashed-hover {
+    @apply card-dashed hover:shadow-paper hover:-translate-y-0.5;
+    border-color: #A8C9A0;
+  }
+  .card-dashed-hover:hover {
+    border-color: #7BA872;
+  }
+
+  /* Buttons with tactile paper-cutout feel */
+  .btn-primary {
+    @apply flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-medium text-cream-50
+           bg-sage-deep shadow-paper-sm
+           transition-all duration-150 hover:bg-sage-dark hover:shadow-paper
+           active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
+           disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-medium text-charcoal
+           bg-cream-200 border border-cream-400 shadow-paper-sm
+           transition-all duration-150 hover:bg-cream-300 hover:shadow-paper
+           active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
+  }
+  .btn-terracotta {
+    @apply flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-medium text-cream-50
+           bg-terracotta-deep shadow-paper-sm
+           transition-all duration-150 hover:bg-terracotta-dark hover:shadow-paper
+           active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
+  }
+  .btn-mustard {
+    @apply flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-medium text-charcoal
+           bg-mustard shadow-paper-sm
+           transition-all duration-150 hover:bg-mustard-dark hover:shadow-paper
+           active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  /* Music staff background — 5 horizontal lines */
+  .staff-bg {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 23px,
+      rgba(45, 44, 42, 0.06) 23px,
+      rgba(45, 44, 42, 0.06) 24px
+    );
+    background-size: 100% 120px;
+  }
+}
