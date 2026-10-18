@@ -87,6 +87,8 @@ export function RegisterBlending() {
     setCrackDetected(false);
     setTransitionCount(0);
     lastResonatorRef.current = null;
+    smoothFreqRef.current = null;
+    setSmoothedFreq(null);
   };
 
   return (

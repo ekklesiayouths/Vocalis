@@ -41,8 +41,11 @@ export function DexterityDrills() {
   const [hits, setHits] = useState<NoteHit[]>([]);
   const [slowMode, setSlowMode] = useState(false);
   const [scoreResult, setScoreResult] = useState<ScoreSubmissionResult | null>(null);
+  const [currentNote, setCurrentNote] = useState(0);
   const currentNoteRef = useRef(0);
   const hitsRef = useRef<NoteHit[]>([]);
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
   const targetMidis = PENTATONIC_DEGREES.map((d) => C4 + d);
   const noteCount = targetMidis.length;
@@ -52,6 +55,7 @@ export function DexterityDrills() {
     setHits([]);
     hitsRef.current = [];
     currentNoteRef.current = 0;
+    setCurrentNote(0);
     playSequence(
       targetMidis.map((midi) => ({
         frequency: midiToFrequency(midi),
@@ -67,6 +71,7 @@ export function DexterityDrills() {
     setTimeout(() => {
       setPhase('mimicking');
       currentNoteRef.current = 0;
+      setCurrentNote(0);
     }, totalMs);
   }, [playSequence, targetMidis, durationMul]);
 
@@ -81,10 +86,11 @@ export function DexterityDrills() {
         return;
       }
 
-      if (metrics.frequency && metrics.clarity > 0.3) {
+      const m = metricsRef.current;
+      if (m.frequency && m.clarity > 0.3) {
         const targetMidi = targetMidis[currentNoteRef.current];
         const targetFreq = midiToFrequency(targetMidi);
-        const userNote = frequencyToNote(metrics.frequency);
+        const userNote = frequencyToNote(m.frequency);
         const targetNote = frequencyToNote(targetFreq);
 
         if (userNote && targetNote && userNote.noteName === targetNote.noteName && Math.abs(userNote.cents - targetNote.cents) < TOLERANCE_CENTS) {
@@ -92,10 +98,11 @@ export function DexterityDrills() {
           hitsRef.current = newHits;
           setHits(newHits);
           currentNoteRef.current += 1;
+          setCurrentNote(currentNoteRef.current);
         }
       }
     }, 150);
-  }, [metrics, noteCount, targetMidis]);
+  }, [noteCount, targetMidis]);
 
   // Start checking when entering mimicking phase
   const prevPhaseRef = useRef(phase);
@@ -172,7 +179,7 @@ export function DexterityDrills() {
         <div className="flex items-end justify-center gap-2 py-4 flex-wrap max-w-lg">
           {targetMidis.map((midi, i) => {
             const hit = hits.find((h) => h.index === i && h.hit);
-            const isCurrent = phase === 'mimicking' && currentNoteRef.current === i;
+            const isCurrent = phase === 'mimicking' && currentNote === i;
             const offset = [0, -6, -12, -18, -24, -18, -12, -6, 0][i] ?? 0;
             return (
               <div
@@ -216,7 +223,7 @@ export function DexterityDrills() {
               Current: {metrics.noteLabel ?? '—'}
             </div>
           </div>
-          {currentNoteRef.current >= noteCount ? (
+          {currentNote >= noteCount ? (
             <button onClick={handleFinish} className="btn-primary max-w-xs w-full">
               See Results
             </button>

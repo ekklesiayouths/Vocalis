@@ -86,7 +86,7 @@ export function VowelBlending() {
       </div>
 
       <p className="max-w-sm text-center text-sm text-charcoal-muted">
-        One part is singing too bright. Adjust the sliders from "Harsh/Bright" to "Round/Blended" until the chord sounds unified.
+        Two parts are singing too bright. Adjust each slider from "Harsh/Bright" toward "Round/Blended" until all three voices sound unified. The chord tone changes as you move each slider.
       </p>
 
       {phase === 'ready' && (
@@ -117,6 +117,8 @@ export function VowelBlending() {
                   min={0}
                   max={100}
                   value={val}
+                  aria-label={`${sliderLabels[i]} vowel blend`}
+                  aria-valuetext={val >= 60 ? 'Round' : val >= 30 ? 'Mixed' : 'Harsh'}
                   onChange={(e) => handleSliderChange(i, Number(e.target.value))}
                   className="w-full h-3 rounded-full appearance-none cursor-pointer bg-cream-300 accent-sage-DEFAULT"
                   style={{

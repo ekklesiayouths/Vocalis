@@ -36,8 +36,8 @@ const QUESTIONS: IntervalQuestion[] = [
   { rootMidi: C4_MIDI, targetMidi: C4_MIDI + 4, correctAnswer: 'Skip Up (3rd)', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Major 3rd', semitones: 4 },
   { rootMidi: C4_MIDI, targetMidi: C4_MIDI + 7, correctAnswer: 'Perfect 5th', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Perfect 5th', semitones: 7 },
   { rootMidi: C4_MIDI, targetMidi: C4_MIDI + 12, correctAnswer: 'The Sky (Octave)', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Perfect Octave', semitones: 12 },
-  { rootMidi: C4_MIDI, targetMidi: C4_MIDI + 4, correctAnswer: 'Skip Up (3rd)', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Major 3rd', semitones: 4 },
-  { rootMidi: C4_MIDI, targetMidi: C4_MIDI + 7, correctAnswer: 'Perfect 5th', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Perfect 5th', semitones: 7 },
+  { rootMidi: C4_MIDI, targetMidi: C4_MIDI - 5, correctAnswer: 'Perfect 5th', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Perfect 5th (descending, F4 below C4)', semitones: 7 },
+  { rootMidi: C4_MIDI, targetMidi: C4_MIDI - 9, correctAnswer: 'The Sky (Octave)', options: ['Step Up (2nd)', 'Skip Up (3rd)', 'Perfect 5th', 'The Sky (Octave)'], intervalName: 'Major 6th (descending, E3 below C4)', semitones: 9 },
 ];
 
 export function IntervalRecognition() {
@@ -96,7 +96,14 @@ export function IntervalRecognition() {
   const handleStart = useCallback(() => {
     setPhase('listening');
     startTimeRef.current = Date.now();
-  }, []);
+    // Auto-play the first interval so the user hears something immediately
+    setTimeout(() => {
+      playSequence([
+        { frequency: midiToFrequency(QUESTIONS[0].rootMidi), durationMs: 500, type: 'triangle', volume: 0.2 },
+        { frequency: midiToFrequency(QUESTIONS[0].targetMidi), durationMs: 600, type: 'triangle', volume: 0.2 },
+      ], { gapMs: 200 });
+    }, 300);
+  }, [playSequence]);
 
   const tutorContext = selected
     ? `Quiz: Interval Recognition\nroot: C4\ntarget interval: ${question.intervalName} (${question.semitones} semitones)\nuser answered: ${selected}\ncorrect answer: ${question.correctAnswer}`

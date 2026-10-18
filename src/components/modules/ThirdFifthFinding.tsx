@@ -38,10 +38,14 @@ export function ThirdFifthFinding() {
   const loopIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stableRef = useRef(0);
   const lastTickRef = useRef<number | null>(null);
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
   const targetMidi = choice === 'third-above' ? C4 + 4 : C4 - 7;
   const targetFreq = midiToFrequency(targetMidi);
   const targetNote = frequencyToNote(targetFreq);
+  const targetNoteRef = useRef(targetNote);
+  targetNoteRef.current = targetNote;
 
   const playLeadLoop = useCallback(() => {
     playSequence(
@@ -75,9 +79,11 @@ export function ThirdFifthFinding() {
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      if (metrics.frequency && metrics.clarity > 0.3) {
-        const userNote = frequencyToNote(metrics.frequency);
-        if (userNote && targetNote && userNote.noteName === targetNote.noteName && Math.abs(userNote.cents - targetNote.cents) < TOLERANCE_CENTS) {
+      const m = metricsRef.current;
+      if (m.frequency && m.clarity > 0.3) {
+        const userNote = frequencyToNote(m.frequency);
+        const tn = targetNoteRef.current;
+        if (userNote && tn && userNote.noteName === tn.noteName && Math.abs(userNote.cents - tn.cents) < TOLERANCE_CENTS) {
           stableRef.current += delta;
           setStableSeconds(stableRef.current);
         } else {
@@ -87,7 +93,7 @@ export function ThirdFifthFinding() {
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [phase, metrics, targetNote]);
+  }, [phase]);
 
   const handleChoose = useCallback((c: HarmonyChoice) => {
     setChoice(c);
@@ -168,7 +174,7 @@ export function ThirdFifthFinding() {
           <div className="flex items-center gap-2 text-sm">
             <div className="h-2 w-2 rounded-full bg-sage-DEFAULT animate-pulse" />
             <span className="text-charcoal-muted">Lead melody looping...</span>
-            <button onClick={playLeadLoop} className="ml-2 text-sage-deep hover:text-sage-deep/70">
+            <button onClick={() => { stopLeadLoop(); startLeadLoop(); }} className="ml-2 text-sage-deep hover:text-sage-deep/70">
               <Volume2 className="h-4 w-4 inline" /> Replay
             </button>
           </div>

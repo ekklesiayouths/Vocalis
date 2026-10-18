@@ -159,7 +159,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
         setChoirSongs(local.map((s) => ({
           id: s.id, title: s.title, pedagogical_focus: null, lyrics: s.lyrics,
           audio_path: s.local_audio_url ?? null, processing_status: s.processing_status ?? 'completed',
-          processing_error: null, lyrics_verified: s.lyrics_verified ?? true,
+          processing_error: null, lyrics_verified: s.lyrics_verified ?? false,
           melody_verified: s.melody_verified ?? false, confirmed_key: s.confirmed_key ?? null,
           tonic_solfa: s.tonic_solfa ?? null, created_at: s.created_at,
         })));
@@ -173,7 +173,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
         setChoirSongs(local.map((s) => ({
           id: s.id, title: s.title, pedagogical_focus: null, lyrics: s.lyrics,
           audio_path: s.local_audio_url ?? null, processing_status: s.processing_status ?? 'completed',
-          processing_error: null, lyrics_verified: s.lyrics_verified ?? true,
+          processing_error: null, lyrics_verified: s.lyrics_verified ?? false,
           melody_verified: s.melody_verified ?? false, confirmed_key: s.confirmed_key ?? null,
           tonic_solfa: s.tonic_solfa ?? null, created_at: s.created_at,
         })));
@@ -193,7 +193,7 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
       setChoirSongs(local.map((s) => ({
         id: s.id, title: s.title, pedagogical_focus: null, lyrics: s.lyrics,
         audio_path: s.local_audio_url ?? null, processing_status: s.processing_status ?? 'completed',
-        processing_error: null, lyrics_verified: s.lyrics_verified ?? true,
+        processing_error: null, lyrics_verified: s.lyrics_verified ?? false,
         melody_verified: s.melody_verified ?? false, confirmed_key: s.confirmed_key ?? null,
         tonic_solfa: s.tonic_solfa ?? null, created_at: s.created_at,
       })));
@@ -610,16 +610,30 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     const solfaArray = editSolfa.split('\n').map((s) => s.trim()).filter(Boolean);
     const newStatus = editLyrics.trim().length > 0 ? 'completed' : 'review';
 
+    // Editing content revokes director verification — re-approval happens
+    // through the upload/review flow, not implicitly by saving an edit.
+    // Flags are only preserved when the relevant content is unchanged.
+    const preserveFlags = (song: { lyrics: string; lyrics_verified: boolean; confirmed_key: string | null; tonic_solfa: string[] | null; melody_verified: boolean }) => {
+      const lyricsUnchanged = song.lyrics === editLyrics;
+      const melodyUnchanged = song.confirmed_key === (editKey || null) &&
+        JSON.stringify(song.tonic_solfa ?? []) === JSON.stringify(solfaArray);
+      return {
+        lyrics_verified: lyricsUnchanged ? song.lyrics_verified : false,
+        melody_verified: melodyUnchanged ? song.melody_verified : false,
+      };
+    };
+
     if (usingLocalFallback) {
       const local = loadLocalSongs(choirId);
       const song = local.find((s) => s.id === songId);
       if (song) {
+        const flags = preserveFlags(song);
         song.lyrics = editLyrics;
         song.confirmed_key = editKey || null;
         song.tonic_solfa = solfaArray.length > 0 ? solfaArray : null;
         song.processing_status = newStatus;
-        song.lyrics_verified = editLyrics.trim().length > 0;
-        song.melody_verified = solfaArray.length > 0 && !!editKey;
+        song.lyrics_verified = flags.lyrics_verified;
+        song.melody_verified = flags.melody_verified;
         saveLocalSong(song);
       }
       setEditingSongId(null);
@@ -629,14 +643,21 @@ export function SongHub({ choirId, isDirector }: SongHubProps) {
     }
     try {
       if (!supabase) throw new Error('Not connected');
+      const { data: existing, error: fetchError } = await supabase
+        .from('choir_songs')
+        .select('lyrics, lyrics_verified, confirmed_key, tonic_solfa, melody_verified')
+        .eq('id', songId)
+        .maybeSingle();
+      if (fetchError) throw fetchError;
+      const flags = existing ? preserveFlags(existing as { lyrics: string; lyrics_verified: boolean; confirmed_key: string | null; tonic_solfa: string[] | null; melody_verified: boolean }) : { lyrics_verified: false, melody_verified: false };
       const { error: updateError } = await supabase
         .from('choir_songs')
         .update({
           lyrics: editLyrics, confirmed_key: editKey || null,
           tonic_solfa: solfaArray.length > 0 ? solfaArray : null,
           processing_status: newStatus,
-          lyrics_verified: editLyrics.trim().length > 0,
-          melody_verified: solfaArray.length > 0 && !!editKey,
+          lyrics_verified: flags.lyrics_verified,
+          melody_verified: flags.melody_verified,
         }).eq('id', songId);
       if (updateError) throw updateError;
       setEditingSongId(null);

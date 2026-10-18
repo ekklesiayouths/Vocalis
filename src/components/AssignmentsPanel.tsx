@@ -11,7 +11,7 @@
  * - No raw user input rendered as HTML.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClipboardList, Plus, Calendar, X, Check, User, Crown, Loader2, Trash2 } from 'lucide-react';
 import { sanitizeText } from '@/lib/validation';
 import { useUser } from '@/context/UserContext';
@@ -83,7 +83,7 @@ export function AssignmentsPanel({ choirId, isDirector, members }: AssignmentsPa
   const [customDesc, setCustomDesc] = useState('');
   const [deadline, setDeadline] = useState('');
   const [assignedTo, setAssignedTo] = useState('all');
-  const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false);
 
   const loadAssignments = useCallback(() => {
     setLoading(true);
@@ -100,12 +100,13 @@ export function AssignmentsPanel({ choirId, isDirector, members }: AssignmentsPa
       ? TASK_TEMPLATES[selectedTemplate].title
       : sanitizeText(customTitle, 120);
     if (title.length === 0) return;
+    if (submittingRef.current) return; // guard against rapid double-clicks
+    submittingRef.current = true;
     const desc = selectedTemplate !== null
       ? TASK_TEMPLATES[selectedTemplate].description
       : sanitizeText(customDesc, 300);
     const cleanDeadline = sanitizeText(deadline, 50);
 
-    setSaving(true);
     const assignment: Assignment = {
       id: 'local-assign-' + Date.now(),
       choirId,
@@ -124,7 +125,7 @@ export function AssignmentsPanel({ choirId, isDirector, members }: AssignmentsPa
     setCustomDesc('');
     setDeadline('');
     setAssignedTo('all');
-    setSaving(false);
+    submittingRef.current = false;
   }, [selectedTemplate, customTitle, customDesc, deadline, assignedTo, choirId, profile.displayName]);
 
   const handleDelete = useCallback((id: string) => {
@@ -219,8 +220,8 @@ export function AssignmentsPanel({ choirId, isDirector, members }: AssignmentsPa
             </select>
           </div>
 
-          <button onClick={handleCreate} disabled={saving || (selectedTemplate === null && customTitle.trim().length === 0)} className="btn-primary text-sm">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          <button onClick={handleCreate} disabled={selectedTemplate === null && customTitle.trim().length === 0} className="btn-primary text-sm">
+            <Check className="h-4 w-4" />
             Assign Task
           </button>
         </div>

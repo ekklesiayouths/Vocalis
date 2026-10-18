@@ -13,7 +13,7 @@
  * SECURITY: Static data with Sol-fa mappings. Audio uses useTonePlayer.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Music, Play, Pause, BookOpen } from 'lucide-react';
 import { useTonePlayer } from '@/hooks/useTonePlayer';
 import { midiToFrequency } from '@/lib/notes';
@@ -59,9 +59,19 @@ export function SongLearningLibrary() {
   const { playSequence, cleanup } = useTonePlayer();
   const [playingSongId, setPlayingSongId] = useState<string | null>(null);
   const [playingSyllable, setPlayingSyllable] = useState<string | null>(null);
+  const fullTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syllableTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (fullTimeoutRef.current) clearTimeout(fullTimeoutRef.current);
+      if (syllableTimeoutRef.current) clearTimeout(syllableTimeoutRef.current);
+    };
+  }, []);
 
   const handlePlayFull = useCallback((song: SolFaSong) => {
     const id = `song-${song.id}`;
+    if (fullTimeoutRef.current) { clearTimeout(fullTimeoutRef.current); fullTimeoutRef.current = null; }
     if (playingSongId === id) {
       cleanup();
       setPlayingSongId(null);
@@ -69,13 +79,17 @@ export function SongLearningLibrary() {
     }
     cleanup();
     setPlayingSongId(id);
-    playSequence(getToneEntries(song.fullMelodyMidi, song.oscillatorType, song.tempoBpm), { gapMs: 100 });
-    const totalMs = song.fullMelodyMidi.length * (60 / song.tempoBpm) * 1000;
-    setTimeout(() => setPlayingSongId(null), totalMs);
+    const noteDurMs = (60 / song.tempoBpm) * 1000 * 0.8;
+    const gapMs = 100;
+    playSequence(getToneEntries(song.fullMelodyMidi, song.oscillatorType, song.tempoBpm), { gapMs });
+    // Match the actual playback timing (0.8x note duration + gap per note)
+    const totalMs = song.fullMelodyMidi.length * (noteDurMs + gapMs);
+    fullTimeoutRef.current = setTimeout(() => setPlayingSongId(null), totalMs);
   }, [playingSongId, playSequence, cleanup]);
 
   const handlePlaySyllable = useCallback((song: SolFaSong, syllable: { syllable: string; midi: number }, index: number) => {
     const id = `${song.id}-${index}`;
+    if (syllableTimeoutRef.current) { clearTimeout(syllableTimeoutRef.current); syllableTimeoutRef.current = null; }
     if (playingSyllable === id) {
       cleanup();
       setPlayingSyllable(null);
@@ -84,7 +98,7 @@ export function SongLearningLibrary() {
     cleanup();
     setPlayingSyllable(id);
     playSequence(getToneEntries([syllable.midi], song.oscillatorType, song.tempoBpm), { gapMs: 0 });
-    setTimeout(() => setPlayingSyllable(null), 800);
+    syllableTimeoutRef.current = setTimeout(() => setPlayingSyllable(null), 800);
   }, [playingSyllable, playSequence, cleanup]);
 
   return (

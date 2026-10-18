@@ -32,6 +32,8 @@ export function FineTuningDrill() {
 
   const holdRef = useRef(0);
   const lastTickRef = useRef<number | null>(null);
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
   // Start/stop the continuous drone
   useEffect(() => {
@@ -57,8 +59,8 @@ export function FineTuningDrill() {
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      const cents = metrics.cents ?? 0;
-      const inTune = metrics.frequency !== null && metrics.clarity > 0.3 && Math.abs(cents) <= TOLERANCE_CENTS;
+      const m = metricsRef.current;
+      const inTune = m.frequency !== null && m.clarity > 0.3 && Math.abs(m.cents ?? 0) <= TOLERANCE_CENTS;
 
       if (inTune) {
         holdRef.current += delta;
@@ -74,7 +76,7 @@ export function FineTuningDrill() {
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [isActive, metrics]);
+  }, [isActive]);
 
   const handleStartDrone = useCallback(() => {
     setDronePlaying(true);
@@ -104,7 +106,6 @@ export function FineTuningDrill() {
     holdRef.current = 0;
     stop();
   }, [cleanup, stop]);
-
   const cents = metrics.cents ?? 0;
   const inTune = metrics.frequency !== null && metrics.clarity > 0.3 && Math.abs(cents) <= TOLERANCE_CENTS;
   const noteOffset = Math.max(-60, Math.min(60, cents));

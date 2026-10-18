@@ -9,7 +9,7 @@
  * keyboard/drone practice. Score via submitScore RPC.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Crown, Volume2, Square, Music } from 'lucide-react';
 import { useTonePlayer } from '@/hooks/useTonePlayer';
 import { midiToFrequency, midiToNoteName } from '@/lib/notes';
@@ -44,36 +44,62 @@ const SATB_PARTS = [
 export function ACappellaKeyStarts() {
   const { playTone, stopAll, cleanup } = useTonePlayer();
   const [droneMidi, setDroneMidi] = useState<number | null>(null);
-  const [droneInterval, setDroneInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [lastPlayed, setLastPlayed] = useState<string | null>(null);
   const [scoreResult, setScoreResult] = useState<ScoreSubmissionResult | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const droneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track real practice activity: notes explored and SATB pitches previewed
+  const uniqueNotesRef = useRef<Set<number>>(new Set());
+  const satbPreviewedRef = useRef<Set<string>>(new Set());
+
+  // Clear the drone interval on unmount so audio stops when leaving the page
+  useEffect(() => {
+    return () => {
+      if (droneIntervalRef.current) {
+        clearInterval(droneIntervalRef.current);
+        droneIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const playNote = useCallback((midi: number) => {
     playTone({ frequency: midiToFrequency(midi), durationMs: 600, type: 'triangle', volume: 0.2 });
     setLastPlayed(midiToNoteName(midi) + Math.floor(midi / 12 - 1));
+    uniqueNotesRef.current.add(midi);
   }, [playTone, setLastPlayed]);
+
+  const previewSATB = useCallback((label: string, midi: number) => {
+    playNote(midi);
+    satbPreviewedRef.current.add(label);
+  }, [playNote]);
 
   const startDrone = useCallback((midi: number) => {
     stopAll();
-    if (droneInterval) clearInterval(droneInterval);
+    if (droneIntervalRef.current) clearInterval(droneIntervalRef.current);
     setDroneMidi(midi);
     playTone({ frequency: midiToFrequency(midi), durationMs: 2000, type: 'sine', volume: 0.1 });
-    const interval = setInterval(() => {
+    uniqueNotesRef.current.add(midi);
+    droneIntervalRef.current = setInterval(() => {
       playTone({ frequency: midiToFrequency(midi), durationMs: 2000, type: 'sine', volume: 0.1 });
     }, 1900);
-    setDroneInterval(interval);
-  }, [playTone, stopAll, droneInterval]);
+  }, [playTone, stopAll]);
 
   const stopDrone = useCallback(() => {
     stopAll();
-    if (droneInterval) { clearInterval(droneInterval); setDroneInterval(null); }
+    if (droneIntervalRef.current) { clearInterval(droneIntervalRef.current); droneIntervalRef.current = null; }
     setDroneMidi(null);
-  }, [stopAll, droneInterval]);
+  }, [stopAll]);
 
   const handleSave = useCallback(async () => {
     stopDrone();
-    const result = await submitScore('A Cappella Key Starts', 80, 30);
+    setIsSubmitting(true);
+    // Score reflects actual practice: SATB previews (up to 60%) + note exploration (up to 40%)
+    const satbScore = Math.min(60, satbPreviewedRef.current.size * 15);
+    const exploreScore = Math.min(40, uniqueNotesRef.current.size * 4);
+    const accuracy = Math.min(100, satbScore + exploreScore);
+    const result = await submitScore('A Cappella Key Starts', accuracy, 30);
     setScoreResult(result);
+    setIsSubmitting(false);
   }, [stopDrone]);
 
   const handleRestart = useCallback(() => {
@@ -102,7 +128,7 @@ export function ACappellaKeyStarts() {
         {SATB_PARTS.map((part) => (
           <button
             key={part.label}
-            onClick={() => playNote(part.midi)}
+            onClick={() => previewSATB(part.label, part.midi)}
             className={`flex items-center gap-2 rounded-xl border-2 px-4 py-2.5 font-medium shadow-paper-sm transition-all active:translate-y-0.5 active:shadow-none ${part.color}`}
           >
             <Music className="h-4 w-4" /> {part.label}
@@ -127,6 +153,8 @@ export function ACappellaKeyStarts() {
               key={note.midi}
               onClick={() => playNote(note.midi)}
               onContextMenu={(e) => { e.preventDefault(); startDrone(note.midi); }}
+              onDoubleClick={() => startDrone(note.midi)}
+              aria-label={`Play ${note.label}. Double-tap or right-click to hold as drone.`}
               className={`flex-1 h-28 rounded-b-lg border-2 border-cream-400 bg-cream-50 flex items-end justify-center pb-2 text-[10px] text-charcoal-muted transition-all hover:bg-cream-200 active:bg-cream-300 ${droneMidi === note.midi ? 'bg-sage-light ring-2 ring-sage-DEFAULT' : ''}`}
             >
               {note.label}
@@ -143,6 +171,8 @@ export function ACappellaKeyStarts() {
                   <button
                     onClick={() => playNote(blackKey.midi)}
                     onContextMenu={(e) => { e.preventDefault(); startDrone(blackKey.midi); }}
+                    onDoubleClick={() => startDrone(blackKey.midi)}
+                    aria-label={`Play ${blackKey.label}. Double-tap or right-click to hold as drone.`}
                     className={`pointer-events-auto w-2/3 h-16 rounded-b-md border border-charcoal/30 bg-charcoal flex items-end justify-center pb-1 text-[8px] text-cream-50 transition-all hover:bg-charcoal-light active:bg-charcoal ${droneMidi === blackKey.midi ? 'bg-sage-deep ring-2 ring-sage-DEFAULT' : ''}`}
                   >
                     {blackKey.label}
@@ -155,7 +185,7 @@ export function ACappellaKeyStarts() {
       </div>
 
       <p className="text-xs text-charcoal-muted text-center">
-        Tip: Right-click a key to hold it as a drone. Click again to stop.
+        Tip: Double-tap (or right-click) a key to hold it as a drone. Use “Stop Drone” to release it.
       </p>
 
       {/* Drone controls */}
@@ -172,8 +202,8 @@ export function ACappellaKeyStarts() {
           </>
         )}
         {droneMidi === null && lastPlayed && (
-          <button onClick={handleSave} className="btn-primary">
-            <Volume2 className="h-4 w-4" /> Save Practice Session
+          <button onClick={handleSave} className="btn-primary" disabled={isSubmitting}>
+            <Volume2 className="h-4 w-4" /> {isSubmitting ? 'Saving...' : 'Save Practice Session'}
           </button>
         )}
       </div>

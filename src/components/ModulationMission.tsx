@@ -5,7 +5,7 @@
  * Teach Me modal includes interactive AI tutor chat (TutorChat).
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, X, Lightbulb, RotateCcw, Volume2, ArrowRight } from 'lucide-react';
 import { submitScore, type ScoreSubmissionResult } from '@/lib/scoreService';
 import { TutorChat } from '@/components/TutorChat';
@@ -27,7 +27,7 @@ const QUESTIONS: ModulationQuestion[] = [
   { id: 'q1', fromKey: 'C Major', toKey: 'D Major', correctAnswer: 'Whole step up', options: ['Half step up', 'Whole step up', 'Half step down', 'Whole step down'], fromFrequency: 261.63, toFrequency: 293.66, explanation: 'C Major to D Major is a modulation of 2 semitones upward. Each semitone is a half step, so 2 semitones = 1 whole step. The tonic moves from C (261.63 Hz) to D (293.66 Hz).', semitoneDistance: 2, direction: 'up' },
   { id: 'q2', fromKey: 'G Major', toKey: 'F Major', correctAnswer: 'Whole step down', options: ['Half step up', 'Whole step up', 'Half step down', 'Whole step down'], fromFrequency: 392.0, toFrequency: 349.23, explanation: 'G Major to F Major is a modulation of 2 semitones downward. The tonic descends from G (392 Hz) to F (349.23 Hz), which is one whole step down.', semitoneDistance: 2, direction: 'down' },
   { id: 'q3', fromKey: 'E Major', toKey: 'F Major', correctAnswer: 'Half step up', options: ['Half step up', 'Whole step up', 'Half step down', 'Whole step down'], fromFrequency: 329.63, toFrequency: 349.23, explanation: 'E Major to F Major is the smallest modulation possible: just 1 semitone upward. E (329.63 Hz) to F (349.23 Hz) is a half step up — the smallest interval in Western music.', semitoneDistance: 1, direction: 'up' },
-  { id: 'q4', fromKey: 'A Major', toKey: 'C Major', correctAnswer: 'Minor third down', options: ['Half step down', 'Whole step down', 'Minor third down', 'Major third down'], fromFrequency: 440.0, toFrequency: 261.63, explanation: 'A Major to C Major spans 3 semitones downward. A 3-semitone interval is called a minor third. The tonic drops from A (440 Hz) down to C (261.63 Hz).', semitoneDistance: 3, direction: 'down' },
+  { id: 'q4', fromKey: 'A Major', toKey: 'F Major', correctAnswer: 'Minor third down', options: ['Half step down', 'Whole step down', 'Minor third down', 'Major third down'], fromFrequency: 440.0, toFrequency: 349.23, explanation: 'A Major to F Major spans 3 semitones downward. A 3-semitone interval is called a minor third. The tonic drops from A (440 Hz) down to F (349.23 Hz).', semitoneDistance: 3, direction: 'down' },
 ];
 
 type QuizPhase = 'listening' | 'answering' | 'answered' | 'complete';
@@ -49,6 +49,16 @@ export function ModulationMission() {
 
   const startTimeRef = useRef<number>(Date.now());
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Close the AudioContext on unmount to release audio hardware
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => { /* ignore */ });
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
 
   const question = QUESTIONS[currentIndex];
   const isLastQuestion = currentIndex === QUESTIONS.length - 1;

@@ -22,13 +22,16 @@ import { useAudioInput, type AudioMetrics } from '@/hooks/useAudioInput';
 import { MicPermission } from '@/components/MicPermission';
 import { submitScore, type ScoreSubmissionResult } from '@/lib/scoreService';
 import { submitAttempt } from '@/lib/progressService';
+import {
+  NOISE_FLOOR_DURATION_MS, SIGNAL_DURATION_MS, HYSTERESIS_MS,
+  average, isSignalSample, calibrationSucceeded, computeCalibration,
+  isInZone, zonePercent, type CalibrationResult,
+} from '@/lib/breathCalibration';
 
 const COL_HEIGHT = 280;
 
 // Calibration phases
 type CalPhase = 'idle' | 'noise-floor' | 'signal' | 'ready';
-const NOISE_FLOOR_DURATION_MS = 3000;
-const SIGNAL_DURATION_MS = 3000;
 
 export function BreathTracker() {
   const { permission, errorMessage, isActive, isReceiving, metrics, start, stop } = useAudioInput({
@@ -53,7 +56,6 @@ export function BreathTracker() {
   const startTimeRef = useRef<number | null>(null);
   const bestSustainRef = useRef(0);
   const outOfZoneStartRef = useRef<number | null>(null);
-  const hysteresisMs = 500;
 
   // Calibration refs
   const noiseFloorRef = useRef(0);
@@ -62,7 +64,6 @@ export function BreathTracker() {
   const calStartRef = useRef<number | null>(null);
   const calibratedMinRef = useRef(0);
   const calibratedMaxRef = useRef(0);
-  const calibratedCenterRef = useRef(0);
 
   // Smoothing loop
   useEffect(() => {
@@ -87,29 +88,27 @@ export function BreathTracker() {
         noiseSamplesRef.current.push(metricsRef.current.rawRms);
         setCalProgress(Math.min(1, elapsed / NOISE_FLOOR_DURATION_MS));
         if (elapsed >= NOISE_FLOOR_DURATION_MS) {
-          const avg = noiseSamplesRef.current.reduce((a, b) => a + b, 0) / noiseSamplesRef.current.length;
+          const avg = average(noiseSamplesRef.current);
           noiseFloorRef.current = avg;
           setCalPhase('signal');
           calStartRef.current = null;
           setCalMessage('Now sustain a comfortable "sss" hiss for 3 seconds.');
         }
       } else if (calPhase === 'signal') {
-        if (metricsRef.current.rawRms > noiseFloorRef.current * 2) {
+        if (isSignalSample(metricsRef.current.rawRms, noiseFloorRef.current)) {
           signalSamplesRef.current.push(metricsRef.current.rawRms);
         }
         setCalProgress(Math.min(1, elapsed / SIGNAL_DURATION_MS));
         if (elapsed >= SIGNAL_DURATION_MS) {
-          if (signalSamplesRef.current.length < 10) {
+          if (!calibrationSucceeded(signalSamplesRef.current)) {
             setCalMessage('Could not detect a clear signal. Please try again in a quieter environment.');
             setCalPhase('idle');
             calStartRef.current = null;
             return;
           }
-          const avgSignal = signalSamplesRef.current.reduce((a, b) => a + b, 0) / signalSamplesRef.current.length;
-          const range = avgSignal - noiseFloorRef.current;
-          calibratedCenterRef.current = noiseFloorRef.current + range * 0.5;
-          calibratedMinRef.current = noiseFloorRef.current + range * 0.25;
-          calibratedMaxRef.current = noiseFloorRef.current + range * 0.85;
+          const cal = computeCalibration(signalSamplesRef.current, noiseFloorRef.current);
+          calibratedMinRef.current = cal.zoneMin;
+          calibratedMaxRef.current = cal.zoneMax;
           setCalPhase('ready');
           setCalMessage('Calibration complete! Sustain your hiss and keep the fluid in the target zone.');
           calStartRef.current = null;
@@ -145,7 +144,7 @@ export function BreathTracker() {
           outOfZoneStartRef.current = now;
         }
         const outDuration = now - outOfZoneStartRef.current;
-        if (outDuration > hysteresisMs) {
+        if (outDuration > HYSTERESIS_MS) {
           sustainedRef.current = 0;
           setSustainedSeconds(0);
         }
@@ -190,16 +189,19 @@ export function BreathTracker() {
   };
 
   // Map smoothed RMS to display percentage using calibrated range
+  const activeZone: CalibrationResult = {
+    noiseFloor: noiseFloorRef.current,
+    zoneMin: calibratedMinRef.current,
+    zoneMax: calibratedMaxRef.current,
+  };
   const displayPercent = calPhase === 'ready' && calibratedMaxRef.current > 0
-    ? Math.min(100, Math.max(0, ((smoothRef.current - noiseFloorRef.current) / (calibratedMaxRef.current - noiseFloorRef.current)) * 100))
+    ? zonePercent(smoothRef.current, activeZone)
     : Math.min(100, smoothedVolume * 100 * 5); // fallback scaling
   const levelPx = (displayPercent / 100) * COL_HEIGHT;
-  const inTargetZone = calPhase === 'ready' &&
-    smoothRef.current >= calibratedMinRef.current &&
-    smoothRef.current <= calibratedMaxRef.current;
+  const inTargetZone = calPhase === 'ready' && isInZone(smoothRef.current, activeZone);
 
   const targetMinPct = calPhase === 'ready' && calibratedMaxRef.current > 0
-    ? ((calibratedMinRef.current - noiseFloorRef.current) / (calibratedMaxRef.current - noiseFloorRef.current)) * 100
+    ? zonePercent(calibratedMinRef.current, activeZone)
     : 25;
   const targetMaxPct = calPhase === 'ready' && calibratedMaxRef.current > 0
     ? 100

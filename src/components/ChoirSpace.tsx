@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Users, Plus, Crown, User, X, Check, Music, LogIn, ArrowRight, Loader2,
-  Shield, ShieldOff, LogOut, Sparkles,
+  LogOut, Sparkles,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { sanitizeText, validateInviteCode } from '@/lib/validation';
@@ -38,6 +38,7 @@ interface Member {
   user_id: string;
   role: string;
   display_name: string | null;
+  joined_at: string;
 }
 
 const LOCAL_CHOIR_KEY = 'vocalis-local-choirs';
@@ -94,10 +95,10 @@ export function ChoirSpace() {
 
   // Active choir view
   const [activeChoirId, setActiveChoirId] = useState<string | null>(null);
+  const [leaveConfirmId, setLeaveConfirmId] = useState<string | null>(null);
   const [choirMembers, setChoirMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
-  const [addMemberEmail, setAddMemberEmail] = useState('');
-  const [addingMember, setAddingMember] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const loadUserChoirs = useCallback(async () => {
@@ -212,30 +213,20 @@ export function ChoirSpace() {
       if (!supabase) { setChoirMembers([]); return; }
       const { data, error: membersError } = await supabase
         .from('choir_memberships')
-        .select('id, user_id, role')
-        .eq('choir_id', choirId);
+        .select('id, user_id, role, display_name, joined_at')
+        .eq('choir_id', choirId)
+        .order('joined_at', { ascending: true });
       if (membersError) throw membersError;
 
-      // Fetch display names from profiles
-      const userIds = (data || []).map((m) => m.user_id);
-      let profiles: { id: string; display_name: string | null }[] = [];
-      if (userIds.length > 0) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, display_name')
-          .in('id', userIds);
-        profiles = profileData || [];
-      }
-
-      const members: Member[] = (data || []).map((m) => {
-        const profile = profiles.find((p) => p.id === m.user_id);
-        return {
-          id: m.id,
-          user_id: m.user_id,
-          role: m.role,
-          display_name: profile?.display_name || 'Unknown',
-        };
-      });
+      // display_name is a snapshot stored on the membership row (profiles are
+      // private per user, so other members' rows are not readable).
+      const members: Member[] = (data || []).map((m) => ({
+        id: m.id,
+        user_id: m.user_id,
+        role: m.role,
+        display_name: m.display_name || 'Unnamed singer',
+        joined_at: m.joined_at,
+      }));
       setChoirMembers(members);
     } catch {
       setChoirMembers([]);
@@ -299,12 +290,14 @@ export function ChoirSpace() {
         .single();
       if (createError) throw createError;
 
-      // Add director as a member with 'director' role
+      // Keep the display-name snapshot current for the roster
+      const displayName = profile.displayName || 'Unnamed singer';
       const { error: membershipError } = await supabase
         .from('choir_memberships')
         .insert({
           choir_id: (data as Choir).id,
           role: 'director',
+          display_name: displayName,
         });
       if (membershipError) throw membershipError;
 
@@ -398,6 +391,7 @@ export function ChoirSpace() {
         .insert({
           choir_id: (choir as Choir).id,
           role: 'member',
+          display_name: profile.displayName || 'Unnamed singer',
         });
       if (membershipError) {
         if (membershipError.code === '23505') {
@@ -427,52 +421,46 @@ export function ChoirSpace() {
     } finally {
       setJoining(false);
     }
-  }, [joinCode, loadUserChoirs, usingLocalFallback]);
-
-  const handleAddMemberByEmail = useCallback(async () => {
-    if (!activeChoirId) return;
-    const cleanEmail = sanitizeText(addMemberEmail, 200);
-    if (cleanEmail.length === 0) return;
-    setAddingMember(true);
-    setError(null);
-    try {
-      // Look up user by email in profiles — but profiles doesn't store email.
-      // In a real app, this would use an admin function. For now, we show
-      // the invite code to share instead.
-      setError('Share the invite code with your singer — they can join from their Choir Space.');
-      setAddMemberEmail('');
-    } catch {
-      setError('Could not add the member. Please try again.');
-    } finally {
-      setAddingMember(false);
-    }
-  }, [activeChoirId, addMemberEmail]);
+  }, [joinCode, loadUserChoirs, usingLocalFallback, profile.displayName]);
 
   const activeChoir = choirs.find((c) => c.id === activeChoirId);
   const activeRole = activeChoirId ? memberships[activeChoirId] : undefined;
   const isDirector = activeRole === 'director';
 
-  const handleLeaveChoir = useCallback(() => {
-    if (!activeChoirId) return;
-    // Remove from local choirs
-    const local = loadLocalChoirs().filter((lc) => lc.id !== activeChoirId);
-    saveLocalChoirs(local);
-    setActiveChoirId(null);
-    setChoirMembers([]);
-    loadUserChoirs();
-    setToast('You have left the choir.');
-  }, [activeChoirId, loadUserChoirs]);
+  const handleLeaveChoir = useCallback(async () => {
+    if (!activeChoirId || !activeRole) return;
+    setLeaving(true);
+    try {
+      if (supabase && !usingLocalFallback) {
+        // Real delete — the RLS delete policy permits self-removal. Verify it
+        // actually removed a row before showing success.
+        const { data: removed, error: deleteError } = await supabase
+          .from('choir_memberships')
+          .delete()
+          .eq('choir_id', activeChoirId)
+          .eq('user_id', (await supabase.auth.getSession()).data.session?.user.id ?? '')
+          .select('id');
+        if (deleteError || !removed || removed.length === 0) {
+          setError('Could not leave the choir. Please try again.');
+          setLeaving(false);
+          return;
+        }
+      }
 
-  const handleToggleAdmin = useCallback((memberId: string, memberName: string, currentRole: string) => {
-    setChoirMembers((prev) =>
-      prev.map((m) =>
-        m.id === memberId ? { ...m, role: currentRole === 'admin' ? 'member' : 'admin' } : m
-      )
-    );
-    const newRole = currentRole === 'admin' ? 'Member' : 'Admin';
-    setToast(`Access Updated: ${memberName} is now a Choir Space ${newRole}!`);
-    setTimeout(() => setToast(null), 3500);
-  }, []);
+      // Remove any local fallback copy as well
+      const local = loadLocalChoirs().filter((lc) => lc.id !== activeChoirId);
+      saveLocalChoirs(local);
+      setActiveChoirId(null);
+      setChoirMembers([]);
+      await loadUserChoirs();
+      setToast('You have left the choir.');
+      setTimeout(() => setToast(null), 3500);
+    } finally {
+      setLeaving(false);
+    }
+  }, [activeChoirId, activeRole, loadUserChoirs, usingLocalFallback]);
+
+  const leaveConfirm = activeChoir && activeRole && !isDirector && leaveConfirmId === activeChoir.id;
 
   if (loading) {
     return (
@@ -567,7 +555,6 @@ export function ChoirSpace() {
 
   // Active choir view
   if (activeChoir && activeRole) {
-    const hasWriteAccess = isDirector || choirMembers.some((m) => m.role === 'admin' && m.user_id === 'local-user');
     return (
       <div className="flex flex-col gap-6 animate-fade-in">
         {/* Back to choir list */}
@@ -614,11 +601,11 @@ export function ChoirSpace() {
           )}
         </div>
 
-        {/* Choir Roster & Authority — visible to all, admin delegation MD only */}
+        {/* Choir Roster — visible to all members */}
         <div className="card flex flex-col gap-3 p-6">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-sage-deep" />
-            <h3 className="font-semibold text-charcoal">Choir Roster & Authority ({choirMembers.length || 1})</h3>
+            <h3 className="font-semibold text-charcoal">Choir Roster ({choirMembers.length || 1})</h3>
           </div>
           {membersLoading ? (
             <div className="flex items-center justify-center py-4">
@@ -626,64 +613,72 @@ export function ChoirSpace() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {/* Director row */}
+              {/* Director row — from the roster data, not viewer state */}
               <div className="flex items-center justify-between rounded-xl bg-cream-200 border border-cream-400 px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-mustard-light border border-mustard-DEFAULT">
                     <Crown className="h-4 w-4 text-mustard-deep" />
                   </div>
                   <div>
-                    <span className="text-sm font-medium text-charcoal">{profile.displayName || 'You'}</span>
+                    <span className="text-sm font-medium text-charcoal">
+                      {choirMembers.find((m) => m.role === 'director')?.display_name || profile.displayName || 'Music Director'}
+                    </span>
                     <span className="ml-2 text-[10px] font-medium text-mustard-deep bg-mustard-light border border-mustard-DEFAULT rounded px-1.5 py-0.5">MD</span>
                   </div>
                 </div>
               </div>
-              {/* Member rows with admin delegation */}
-              {choirMembers.map((m) => (
+              {/* Singer rows */}
+              {choirMembers.filter((m) => m.role !== 'director').map((m) => (
                 <div key={m.id} className="flex items-center justify-between rounded-xl bg-cream-200 border border-cream-400 px-4 py-2.5">
                   <div className="flex items-center gap-2">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${m.role === 'admin' ? 'bg-terracotta-light border border-terracotta-DEFAULT' : 'bg-sage-light border border-sage-DEFAULT'}`}>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-light border border-sage-DEFAULT">
                       <User className="h-4 w-4 text-sage-deep" />
                     </div>
                     <div>
                       <span className="text-sm font-medium text-charcoal">{m.display_name}</span>
-                      <span className={`ml-2 text-[10px] font-medium rounded px-1.5 py-0.5 ${m.role === 'admin' ? 'text-terracotta-deep bg-terracotta-light border border-terracotta-DEFAULT' : 'text-sage-deep bg-sage-light border border-sage-DEFAULT'}`}>
-                        {m.role === 'admin' ? 'Admin' : 'Member'}
-                      </span>
+                      <span className="ml-2 text-[10px] font-medium text-sage-deep bg-sage-light border border-sage-DEFAULT rounded px-1.5 py-0.5">Singer</span>
                     </div>
                   </div>
-                  {isDirector && (
-                    <button
-                      onClick={() => handleToggleAdmin(m.id, m.display_name || 'Member', m.role)}
-                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all active:translate-y-0.5 ${
-                        m.role === 'admin'
-                          ? 'bg-terracotta-light border border-terracotta-DEFAULT text-terracotta-deep hover:bg-terracotta/20'
-                          : 'bg-sage-light border border-sage-DEFAULT text-sage-deep hover:bg-sage-DEFAULT hover:text-cream-50'
-                      }`}
-                    >
-                      {m.role === 'admin' ? <><ShieldOff className="h-3 w-3" /> Revoke Admin</> : <><Shield className="h-3 w-3" /> Make Admin</>}
-                    </button>
-                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Song Hub — write access for MD and admins */}
-        <SongHub choirId={activeChoir.id} isDirector={hasWriteAccess} />
+        {/* Song Hub — only directors can publish or edit rehearsal materials */}
+        <SongHub choirId={activeChoir.id} isDirector={isDirector} />
 
-        {/* Assignments & Tasks — write access for MD and admins */}
-        <AssignmentsPanel choirId={activeChoir.id} isDirector={hasWriteAccess} members={choirMembers.map((m) => ({ id: m.id, display_name: m.display_name, role: m.role }))} />
+        {/* Assignments & Tasks — only directors can create or grade tasks */}
+        <AssignmentsPanel choirId={activeChoir.id} isDirector={isDirector} members={choirMembers.map((m) => ({ id: m.id, display_name: m.display_name, role: m.role }))} />
 
-        {/* Leave Choir — available to all except MD owner */}
+        {/* Leave Choir — available to all except MD owner, with confirmation */}
         {!isDirector && (
-          <button
-            onClick={handleLeaveChoir}
-            className="btn-terracotta w-full max-w-sm mx-auto"
-          >
-            <LogOut className="h-4 w-4" /> Leave Choir
-          </button>
+          leaveConfirm ? (
+            <div className="card flex flex-col gap-3 p-5 max-w-sm mx-auto w-full">
+              <p className="text-sm text-charcoal">
+                Leave <span className="font-medium">{activeChoir.name}</span>? You will need a new
+                invite code from your Music Director to rejoin.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setLeaveConfirmId(null); handleLeaveChoir(); }}
+                  disabled={leaving}
+                  className="btn-terracotta flex-1"
+                >
+                  {leaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  Yes, leave choir
+                </button>
+                <button onClick={() => setLeaveConfirmId(null)} className="btn-secondary">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setLeaveConfirmId(activeChoir.id)}
+              className="btn-terracotta w-full max-w-sm mx-auto"
+            >
+              <LogOut className="h-4 w-4" /> Leave Choir
+            </button>
+          )
         )}
       </div>
     );
