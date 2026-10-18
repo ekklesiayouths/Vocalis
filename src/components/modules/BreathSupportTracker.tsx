@@ -5,17 +5,26 @@
  * over time. A floating musical note stays in a sage "optimal pressure zone"
  * only if airflow volume remains stable.
  *
+ * CALIBRATION:
+ * - Measures noise floor and the user's comfortable signal level before starting.
+ * - Target zone is relative to the user's calibrated level, not an absolute threshold.
+ *
+ * HYSTERESIS:
+ * - Brief dips (under 0.5s) outside the zone do not reset the sustained timer.
+ *
  * SECURITY: Uses useAudioInput (native, no raw audio stored). No score.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Wind, Square } from 'lucide-react';
-import { useAudioInput } from '@/hooks/useAudioInput';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Wind, Square, Gauge } from 'lucide-react';
+import { useAudioInput, type AudioMetrics } from '@/hooks/useAudioInput';
 import { MicPermission } from '@/components/MicPermission';
 
 const TUBE_HEIGHT = 300;
-const TARGET_MIN = 35;
-const TARGET_MAX = 65;
+
+type CalPhase = 'idle' | 'noise-floor' | 'signal' | 'ready';
+const NOISE_FLOOR_DURATION_MS = 3000;
+const SIGNAL_DURATION_MS = 3000;
 
 export function BreathSupportTracker() {
   const { permission, errorMessage, isActive, isReceiving, metrics, start, stop } = useAudioInput({
@@ -27,32 +36,93 @@ export function BreathSupportTracker() {
   const [sustainedSec, setSustainedSec] = useState(0);
   const [bestSustained, setBestSustained] = useState(0);
   const [showTip, setShowTip] = useState(false);
+  const [calPhase, setCalPhase] = useState<CalPhase>('idle');
+  const [calProgress, setCalProgress] = useState(0);
+  const [calMessage, setCalMessage] = useState('');
+
   const smoothRef = useRef(0);
   const sustainedRef = useRef(0);
   const lastTickRef = useRef<number | null>(null);
   const dropDetectedRef = useRef(false);
+  const outOfZoneStartRef = useRef<number | null>(null);
+  const hysteresisMs = 500;
+  const metricsRef = useRef<AudioMetrics>(metrics);
+  metricsRef.current = metrics;
+
+  // Calibration refs
+  const noiseFloorRef = useRef(0);
+  const noiseSamplesRef = useRef<number[]>([]);
+  const signalSamplesRef = useRef<number[]>([]);
+  const calStartRef = useRef<number | null>(null);
+  const calibratedMinRef = useRef(0);
+  const calibratedMaxRef = useRef(0);
 
   useEffect(() => {
     if (!isActive) return;
     const interval = setInterval(() => {
-      smoothRef.current = smoothRef.current * 0.75 + metrics.volume * 0.25;
+      smoothRef.current = smoothRef.current * 0.75 + metricsRef.current.rawRms * 0.25;
       setSmoothedVol(smoothRef.current);
     }, 50);
     return () => clearInterval(interval);
-  }, [isActive, metrics.volume]);
+  }, [isActive]);
 
+  // Calibration loop
   useEffect(() => {
-    if (!isActive) { lastTickRef.current = null; return; }
+    if (!isActive || calPhase === 'idle' || calPhase === 'ready') return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      if (calStartRef.current === null) calStartRef.current = now;
+      const elapsed = now - calStartRef.current;
+
+      if (calPhase === 'noise-floor') {
+        noiseSamplesRef.current.push(metricsRef.current.rawRms);
+        setCalProgress(Math.min(1, elapsed / NOISE_FLOOR_DURATION_MS));
+        if (elapsed >= NOISE_FLOOR_DURATION_MS) {
+          const avg = noiseSamplesRef.current.reduce((a, b) => a + b, 0) / noiseSamplesRef.current.length;
+          noiseFloorRef.current = avg;
+          setCalPhase('signal');
+          calStartRef.current = null;
+          setCalMessage('Now sustain a comfortable "sss" hiss for 3 seconds.');
+        }
+      } else if (calPhase === 'signal') {
+        if (metricsRef.current.rawRms > noiseFloorRef.current * 2) {
+          signalSamplesRef.current.push(metricsRef.current.rawRms);
+        }
+        setCalProgress(Math.min(1, elapsed / SIGNAL_DURATION_MS));
+        if (elapsed >= SIGNAL_DURATION_MS) {
+          if (signalSamplesRef.current.length < 10) {
+            setCalMessage('Could not detect a clear signal. Please try again.');
+            setCalPhase('idle');
+            calStartRef.current = null;
+            return;
+          }
+          const avgSignal = signalSamplesRef.current.reduce((a, b) => a + b, 0) / signalSamplesRef.current.length;
+          const range = avgSignal - noiseFloorRef.current;
+          calibratedMinRef.current = noiseFloorRef.current + range * 0.25;
+          calibratedMaxRef.current = noiseFloorRef.current + range * 0.85;
+          setCalPhase('ready');
+          setCalMessage('Calibrated! Sustain your hiss and keep the note in the sage zone.');
+          calStartRef.current = null;
+        }
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isActive, calPhase]);
+
+  // Sustained timer with hysteresis
+  useEffect(() => {
+    if (!isActive || calPhase !== 'ready') { lastTickRef.current = null; return; }
     const interval = setInterval(() => {
       const now = Date.now();
       if (lastTickRef.current === null) lastTickRef.current = now;
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      // Read the latest smoothed volume from ref, not state
-      const volPercent = smoothRef.current * 100;
-      const inZone = volPercent >= TARGET_MIN && volPercent <= TARGET_MAX;
+      const vol = smoothRef.current;
+      const inZone = vol >= calibratedMinRef.current && vol <= calibratedMaxRef.current;
+
       if (inZone) {
+        outOfZoneStartRef.current = null;
         sustainedRef.current += delta;
         const rounded = Math.floor(sustainedRef.current);
         setSustainedSec(rounded);
@@ -60,22 +130,57 @@ export function BreathSupportTracker() {
         dropDetectedRef.current = false;
         setShowTip(false);
       } else {
-        if (sustainedRef.current > 1 && !dropDetectedRef.current) {
-          dropDetectedRef.current = true;
-          setShowTip(true);
+        if (outOfZoneStartRef.current === null) {
+          outOfZoneStartRef.current = now;
         }
-        sustainedRef.current = 0;
-        setSustainedSec(0);
+        const outDuration = now - outOfZoneStartRef.current;
+        if (outDuration > hysteresisMs) {
+          if (sustainedRef.current > 1 && !dropDetectedRef.current) {
+            dropDetectedRef.current = true;
+            setShowTip(true);
+          }
+          sustainedRef.current = 0;
+          setSustainedSec(0);
+        }
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, [isActive, calPhase]);
 
-  const levelPercent = Math.min(100, smoothedVol * 100);
-  const noteY = TUBE_HEIGHT - (levelPercent / 100) * TUBE_HEIGHT;
-  const inZone = levelPercent >= TARGET_MIN && levelPercent <= TARGET_MAX;
+  const startCalibration = useCallback(() => {
+    noiseSamplesRef.current = [];
+    signalSamplesRef.current = [];
+    calStartRef.current = null;
+    setCalPhase('noise-floor');
+    setCalProgress(0);
+    setCalMessage('Stay quiet for 3 seconds so we can measure background noise.');
+  }, []);
 
-  const handleStop = () => { stop(); setShowTip(false); };
+  const displayPercent = calPhase === 'ready' && calibratedMaxRef.current > 0
+    ? Math.min(100, Math.max(0, ((smoothRef.current - noiseFloorRef.current) / (calibratedMaxRef.current - noiseFloorRef.current)) * 100))
+    : Math.min(100, smoothedVol * 100 * 5);
+  const noteY = TUBE_HEIGHT - (displayPercent / 100) * TUBE_HEIGHT;
+  const inZone = calPhase === 'ready' &&
+    smoothRef.current >= calibratedMinRef.current &&
+    smoothRef.current <= calibratedMaxRef.current;
+
+  const targetMinPct = calPhase === 'ready' && calibratedMaxRef.current > 0
+    ? ((calibratedMinRef.current - noiseFloorRef.current) / (calibratedMaxRef.current - noiseFloorRef.current)) * 100
+    : 25;
+  const targetMaxPct = calPhase === 'ready' && calibratedMaxRef.current > 0
+    ? 100
+    : 75;
+
+  const handleStop = () => {
+    stop();
+    setShowTip(false);
+    setCalPhase('idle');
+    setCalProgress(0);
+    setCalMessage('');
+    setSustainedSec(0);
+    setBestSustained(0);
+    sustainedRef.current = 0;
+  };
 
   return (
     <div className="card flex flex-col items-center gap-6 p-8">
@@ -85,14 +190,43 @@ export function BreathSupportTracker() {
       </div>
 
       <p className="max-w-sm text-center text-sm text-charcoal-muted">
-        Sustain a steady "Sssss" exhale. Keep the floating note in the sage pressure zone. Steady diaphragm = steady airflow!
+        Sustain a steady "Sssss" exhale. After calibrating, keep the floating note in the sage zone.
+        This measures sound consistency, not lung capacity.
       </p>
 
       {permission !== 'granted' && (
         <MicPermission permission={permission} errorMessage={errorMessage} onStart={start} isActive={isActive} isReceiving={isReceiving} />
       )}
 
-      {permission === 'granted' && (
+      {permission === 'granted' && calPhase === 'idle' && (
+        <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+          <div className="rounded-xl bg-cream-200 border border-cream-400 p-4 text-sm text-charcoal-light text-center">
+            <p className="mb-3">Let's calibrate to your microphone and comfortable voice level first.</p>
+            <button onClick={startCalibration} className="btn-primary w-full">
+              <Gauge className="h-4 w-4" /> Start Calibration
+            </button>
+          </div>
+          {isActive && (
+            <button onClick={handleStop} className="btn-terracotta w-full">
+              <Square className="h-4 w-4" /> Stop
+            </button>
+          )}
+        </div>
+      )}
+
+      {permission === 'granted' && (calPhase === 'noise-floor' || calPhase === 'signal') && (
+        <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+          <div className="w-full rounded-xl bg-cream-200 border border-cream-400 p-4">
+            <p className="text-sm text-charcoal-light text-center mb-3">{calMessage}</p>
+            <div className="h-2 rounded-full bg-cream-300 overflow-hidden">
+              <div className="h-full bg-sage-DEFAULT transition-all duration-100" style={{ width: `${calProgress * 100}%` }} />
+            </div>
+            <p className="text-xs text-charcoal-muted text-center mt-2">{Math.round(calProgress * 100)}%</p>
+          </div>
+        </div>
+      )}
+
+      {permission === 'granted' && calPhase === 'ready' && (
         <>
           <div className="flex items-stretch gap-6">
             {/* Vertical paper tube */}
@@ -100,7 +234,7 @@ export function BreathSupportTracker() {
               {/* Optimal pressure zone */}
               <div
                 className="absolute left-0 right-0 border-y-2 border-dashed border-sage-DEFAULT bg-sage-light/40"
-                style={{ bottom: (TARGET_MIN / 100) * TUBE_HEIGHT, height: ((TARGET_MAX - TARGET_MIN) / 100) * TUBE_HEIGHT }}
+                style={{ bottom: (targetMinPct / 100) * TUBE_HEIGHT, height: ((targetMaxPct - targetMinPct) / 100) * TUBE_HEIGHT }}
               >
                 <span className="absolute right-1 top-1 text-[9px] text-sage-deep/60 font-medium">optimal</span>
               </div>
@@ -109,7 +243,7 @@ export function BreathSupportTracker() {
               <div
                 className="absolute bottom-0 left-0 right-0 transition-all duration-100 ease-out"
                 style={{
-                  height: (levelPercent / 100) * TUBE_HEIGHT,
+                  height: (displayPercent / 100) * TUBE_HEIGHT,
                   background: inZone
                     ? 'linear-gradient(to top, rgba(123,168,114,0.4), rgba(168,201,160,0.2))'
                     : 'linear-gradient(to top, rgba(228,165,152,0.3), rgba(228,165,152,0.15))',
@@ -141,9 +275,9 @@ export function BreathSupportTracker() {
               </div>
               <div className="text-center">
                 <span className={`text-lg font-bold ${inZone ? 'text-sage-deep' : 'text-charcoal-muted'}`}>
-                  {inZone ? 'Steady!' : `${levelPercent.toFixed(0)}%`}
+                  {inZone ? 'Steady!' : `${displayPercent.toFixed(0)}%`}
                 </span>
-                <div className="text-xs text-charcoal-muted">pressure</div>
+                <div className="text-xs text-charcoal-muted">level</div>
               </div>
             </div>
           </div>
@@ -155,9 +289,14 @@ export function BreathSupportTracker() {
             </div>
           )}
 
-          <button onClick={handleStop} className="btn-terracotta w-full max-w-xs">
-            <Square className="h-4 w-4" /> Stop
-          </button>
+          <div className="flex flex-col gap-2 w-full max-w-xs">
+            <button onClick={handleStop} className="btn-terracotta w-full">
+              <Square className="h-4 w-4" /> Stop
+            </button>
+            <button onClick={startCalibration} className="btn-secondary text-sm w-full">
+              <Gauge className="h-4 w-4" /> Recalibrate
+            </button>
+          </div>
         </>
       )}
     </div>

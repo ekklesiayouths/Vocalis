@@ -235,6 +235,88 @@ export const COURSES: Record<string, CourseSection> = {
       { label: 'Play a C4 drone for practice', notes: [60], oscillatorType: 'sine' },
     ],
   },
+  'resonators': {
+    readTitle: 'What Are Vocal Resonators?',
+    readBody:
+      'Resonance is how your voice amplifies and colors sound. The three main resonators are chest (low, warm tones), mask (the buzzy forward placement around the nose and lips), and head (bright, high frequencies). By directing your sound into different resonators, you can change the tone color without changing the pitch. The goal is awareness of where you feel vibration — chest buzz on low notes, mask buzz on mid notes, head buzz on high notes.',
+    readAudio: [
+      { label: 'Play a low note (C3 — chest resonance)', notes: [48], oscillatorType: 'sine' },
+      { label: 'Play a mid note (E4 — mask resonance)', notes: [64], oscillatorType: 'sine' },
+      { label: 'Play a high note (A4 — head resonance)', notes: [69], oscillatorType: 'sine' },
+    ],
+    practiceTitle: 'How to Practice Resonance Awareness',
+    practiceMethods: [
+      'Place a hand on your chest and sing a low note — feel the vibration. Then move up and notice when it shifts to your face.',
+      'Hum with lips closed on a mid-range note — the buzzy feeling in your lips and nose is mask resonance.',
+      'Sing a high "ooo" and feel the vibration move behind your eyes and in the top of your head — that is head resonance.',
+    ],
+    anchorSong: 'A humming warm-up',
+    anchorDescription: 'Humming on different pitches helps you feel each resonator in turn.',
+    practiceAudio: [
+      { label: 'Play a resonance sweep (low to high)', notes: [48, 52, 55, 60, 64, 67, 69], oscillatorType: 'sine' },
+    ],
+  },
+  'pentatonic-runs': {
+    readTitle: 'What Is the Pentatonic Scale?',
+    readBody:
+      'The pentatonic scale is a five-note scale (notes 1, 2, 3, 5, and 6 of the major scale). Because it avoids half-step intervals, it always sounds consonant — you can sing almost any pattern with it and it will sound good. The pentatonic scale is the foundation for vocal agility training because the gaps between notes (whole steps and minor thirds) are comfortable to sing at speed. Master the 5-note pattern in one octave, then extend it across two octaves.',
+    readAudio: [
+      { label: 'Play the C major pentatonic (C-D-E-G-A)', notes: [60, 62, 64, 67, 69], oscillatorType: 'triangle' },
+      { label: 'Play a two-octave pentatonic run', notes: [60, 62, 64, 67, 69, 72, 74, 76, 79, 81], oscillatorType: 'triangle' },
+    ],
+    practiceTitle: 'How to Practice Pentatonic Runs',
+    practiceMethods: [
+      'Sing the 5-note ascending and descending pattern slowly: C-D-E-G-A-G-E-D-C. Repeat until every note is clean.',
+      'Gradually increase speed only when the slow version is accurate — speed without accuracy builds bad habits.',
+      'Try the same pattern starting on different notes (D, E, F, G) to build transferable muscle memory.',
+    ],
+    anchorSong: 'Amazing Grace',
+    anchorDescription: 'Amazing Grace uses only pentatonic notes — practice singing it fast for agility training.',
+    practiceAudio: [
+      { label: 'Play a fast pentatonic run', notes: [60, 62, 64, 67, 69, 67, 64, 62, 60], oscillatorType: 'triangle' },
+    ],
+  },
+  'part-stability': {
+    readTitle: 'What Is Part Stability?',
+    readBody:
+      'Part stability is the ability to hold your own harmony line while other singers around you sing different notes. The challenge is that your ear naturally wants to follow the melody — if the melody goes up, you instinctively go up too. To stay stable, you must internalize your part so deeply that it becomes automatic. The key skill is singing your line while a different line plays, without drifting toward it.',
+    readAudio: [
+      { label: 'Play a melody (C-E-G)', notes: [60, 64, 67], oscillatorType: 'triangle' },
+      { label: 'Play a harmony a third above (E-G-B)', notes: [64, 67, 71], oscillatorType: 'sine' },
+      { label: 'Play both together', notes: [60, 64, 64, 67, 67, 71], oscillatorType: 'triangle' },
+    ],
+    practiceTitle: 'How to Practice Part Stability',
+    practiceMethods: [
+      'Sing a single sustained note (e.g., E) while a melody plays on a keyboard or recording — do not follow the melody.',
+      'Practice with a partner: one sings the melody, the other holds a harmony note. Switch roles.',
+      'Record yourself singing your part against the melody, then listen back — did you drift?',
+    ],
+    anchorSong: 'Lean on Me',
+    anchorDescription: 'Sing a third above the melody and hold your line even as the melody moves.',
+    practiceAudio: [
+      { label: 'Play the Lean on Me melody for stability practice', notes: [60, 60, 60, 60, 65, 65, 65, 65, 67, 67, 67, 67], oscillatorType: 'sine' },
+    ],
+  },
+  'satb-arranging': {
+    readTitle: 'What Is SATB Arranging?',
+    readBody:
+      'SATB stands for Soprano, Alto, Tenor, and Bass — the four standard voice parts in a choir. Soprano sings the melody (highest), Alto harmonizes below, Tenor sings the lower harmony, and Bass provides the foundation. As a music director, you need to give each section their starting pitch before a piece begins. This means knowing the chord tones (root, third, fifth) and mapping them to the appropriate voice range. Soprano typically sings the root or melody, Alto the third, Tenor the fifth, and Bass the root an octave down.',
+    readAudio: [
+      { label: 'Play a C major SATB chord (C4-E4-G4-C3)', notes: [48, 67, 64, 60], oscillatorType: 'triangle' },
+      { label: 'Play each part separately (Bass, Tenor, Alto, Soprano)', notes: [48, 55, 64, 72], oscillatorType: 'sine' },
+    ],
+    practiceTitle: 'How to Practice SATB Arranging',
+    practiceMethods: [
+      'Pick a key (e.g., C major) and sing the root, third, fifth, and octave from memory — these are your SATB pitches.',
+      'Practice giving pitches in the correct order: Bass first (lowest), then Tenor, Alto, and Soprano last.',
+      'Try arranging a simple melody: assign the melody to Soprano, then find Alto, Tenor, and Bass parts that fit.',
+    ],
+    anchorSong: 'A C major chord',
+    anchorDescription: 'The simplest SATB chord — Soprano on C, Alto on E, Tenor on G, Bass on low C.',
+    practiceAudio: [
+      { label: 'Play SATB starting pitches for C major', notes: [48, 55, 64, 72], oscillatorType: 'sine' },
+    ],
+  },
 };
 
 /** Convert a MIDI note array into playable tone sequence entries. */

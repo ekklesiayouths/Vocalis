@@ -32,6 +32,8 @@ export interface AudioMetrics {
   clarity: number;
   /** Scaled RMS volume level (0–1) for display — raw RMS multiplied for visibility */
   volume: number;
+  /** Raw RMS amplitude (0–1) before any scaling — useful for calibration */
+  rawRms: number;
   noteLabel: string | null;
   cents: number | null;
   tuning: 'sharp' | 'flat' | 'in-tune' | null;
@@ -52,6 +54,7 @@ const IDLE_METRICS: AudioMetrics = {
   frequency: null,
   clarity: 0,
   volume: 0,
+  rawRms: 0,
   noteLabel: null,
   cents: null,
   tuning: null,
@@ -105,6 +108,7 @@ export function useAudioInput(options?: {
       frequency: result.frequency,
       clarity: result.clarity,
       volume,
+      rawRms: result.rms,
       noteLabel: null,
       cents: null,
       tuning: null,
