@@ -38,6 +38,7 @@ export function Playground() {
         >
           <ChevronLeft className="h-4 w-4" /> Back to Playground
         </button>
+        {activeGame === 'pitch-quest' && <PitchQuest />}
         {activeGame === 'pitch-flyer' && <PitchFlyer />}
         {activeGame === 'harmony-echo' && <HarmonyEcho />}
       </div>
