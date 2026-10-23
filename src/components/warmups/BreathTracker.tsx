@@ -193,6 +193,7 @@ export function BreathTracker() {
     noiseFloor: noiseFloorRef.current,
     zoneMin: calibratedMinRef.current,
     zoneMax: calibratedMaxRef.current,
+    avgSignal: calibratedMaxRef.current,
   };
   const displayPercent = calPhase === 'ready' && calibratedMaxRef.current > 0
     ? zonePercent(smoothRef.current, activeZone)

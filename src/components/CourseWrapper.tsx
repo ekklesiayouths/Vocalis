@@ -6,6 +6,8 @@
  * - Section B (Practice): Concrete practice methods and anchor song references.
  * - Section C (Game): A tactile launch button that opens the interactive game.
  *
+ * Gracefully handles missing course content by rendering only the game.
+ *
  * SECURITY: Course data is static. Audio uses useTonePlayer (native Web Audio).
  * No user input is stored.
  */
@@ -13,6 +15,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   BookOpen, Headphones, Play, ArrowRight, RotateCcw, Music, ChevronRight,
+  CheckCircle2, AlertCircle, Target, Lightbulb, GraduationCap, ArrowUpRight,
 } from 'lucide-react';
 import { useTonePlayer } from '@/hooks/useTonePlayer';
 import { COURSES, getCourseAudioEntries, type CourseSection } from '@/lib/courseData';
@@ -32,8 +35,38 @@ export function CourseWrapper({ moduleId, moduleTitle, onBack, children }: Cours
 
   const course: CourseSection | undefined = COURSES[moduleId];
 
+  // Graceful fallback: render only the game if no course content exists
   if (!course) {
-    return <>{children}</>;
+    return (
+      <div className="flex flex-col gap-4 animate-fade-in">
+        <button
+          onClick={() => { cleanup(); onBack(); }}
+          className="flex items-center gap-1.5 text-sm text-charcoal-muted transition-colors hover:text-charcoal w-fit"
+        >
+          <RotateCcw className="h-3 w-3" /> Back to Catalog
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cream-200 border border-cream-400 shadow-paper-sm">
+            <BookOpen className="h-6 w-6 text-charcoal-muted" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-charcoal">{moduleTitle}</h3>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-cream-200 border border-cream-400 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-mustard-deep shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-charcoal-light">
+              The written lesson for this module is not available yet. You can still jump straight into the interactive practice below.
+            </p>
+          </div>
+        </div>
+
+        {children}
+      </div>
+    );
   }
 
   const handlePlayAudio = (notes: number[], oscillatorType: OscillatorType) => {
@@ -109,6 +142,42 @@ export function CourseWrapper({ moduleId, moduleTitle, onBack, children }: Cours
             <p className="text-charcoal-light leading-relaxed">{course.readBody}</p>
           </div>
 
+          {/* Metadata: target level, prerequisites, learning outcomes */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl bg-sage-light/40 border border-sage-DEFAULT/50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <GraduationCap className="h-4 w-4 text-sage-deep" />
+                <span className="text-xs font-bold uppercase tracking-wide text-sage-deep">Level</span>
+              </div>
+              <p className="text-sm text-charcoal">{course.targetLevel}</p>
+            </div>
+            <div className="rounded-xl bg-cream-50 border border-cream-400 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowUpRight className="h-4 w-4 text-mustard-deep" />
+                <span className="text-xs font-bold uppercase tracking-wide text-mustard-deep">Prerequisites</span>
+              </div>
+              <ul className="flex flex-col gap-1">
+                {course.prerequisites.map((pre, i) => (
+                  <li key={i} className="text-sm text-charcoal-light">{pre}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-xl bg-cream-50 border border-cream-400 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="h-4 w-4 text-terracotta-deep" />
+                <span className="text-xs font-bold uppercase tracking-wide text-terracotta-deep">You Will Learn</span>
+              </div>
+              <ul className="flex flex-col gap-1">
+                {course.learningOutcomes.map((outcome, i) => (
+                  <li key={i} className="text-sm text-charcoal-light flex gap-1.5">
+                    <span className="text-sage-deep shrink-0">•</span>
+                    <span>{outcome}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
           {course.readAudio.length > 0 && (
             <div className="rounded-xl bg-cream-50 border border-cream-400 p-5">
               <div className="flex items-center gap-2 mb-3">
@@ -181,6 +250,54 @@ export function CourseWrapper({ moduleId, moduleTitle, onBack, children }: Cours
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Common mistakes */}
+          <div className="rounded-xl bg-terracotta-light/30 border border-terracotta-DEFAULT/40 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="h-4 w-4 text-terracotta-deep" />
+              <span className="text-xs font-bold uppercase tracking-wide text-terracotta-deep">Common Mistakes & Tips</span>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {course.commonMistakes.map((mistake, i) => (
+                <li key={i} className="flex gap-2 text-sm text-charcoal-light">
+                  <span className="text-terracotta-deep shrink-0 mt-0.5">!</span>
+                  <span className="leading-relaxed">{mistake}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Mastery criteria & next steps */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-xl bg-sage-light/40 border border-sage-DEFAULT/50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="h-4 w-4 text-sage-deep" />
+                <span className="text-xs font-bold uppercase tracking-wide text-sage-deep">Mastery Criteria</span>
+              </div>
+              <ul className="flex flex-col gap-1.5">
+                {course.masteryCriteria.map((criteria, i) => (
+                  <li key={i} className="text-sm text-charcoal-light flex gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-sage-DEFAULT shrink-0 mt-0.5" />
+                    <span>{criteria}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-xl bg-cream-50 border border-cream-400 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowUpRight className="h-4 w-4 text-mustard-deep" />
+                <span className="text-xs font-bold uppercase tracking-wide text-mustard-deep">Next Steps</span>
+              </div>
+              <ul className="flex flex-col gap-1.5">
+                {course.nextSteps.map((step, i) => (
+                  <li key={i} className="text-sm text-charcoal-light flex gap-1.5">
+                    <ChevronRight className="h-3.5 w-3.5 text-mustard-deep shrink-0 mt-0.5" />
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           <div className="flex gap-3">
