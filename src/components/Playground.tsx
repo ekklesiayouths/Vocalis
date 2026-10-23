@@ -4,11 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Bird, AudioLines, ChevronLeft } from 'lucide-react';
+import { Bird, AudioLines, ChevronLeft, Music } from 'lucide-react';
 import { PitchFlyer } from '@/components/playground/PitchFlyer';
 import { HarmonyEcho } from '@/components/playground/HarmonyEcho';
+import { PitchQuest } from '@/components/playground/PitchQuest';
 
-type GameId = 'pitch-flyer' | 'harmony-echo' | null;
+type GameId = 'pitch-flyer' | 'harmony-echo' | 'pitch-quest' | null;
 
 interface GameCard {
   id: GameId;
@@ -20,7 +21,8 @@ interface GameCard {
 }
 
 const GAMES: GameCard[] = [
-  { id: 'pitch-flyer', label: 'Pitch Flyer', description: 'Sing higher to fly up, lower to dive. Guide your bird through the gaps!', icon: Bird, color: 'text-sage-deep', bg: 'bg-sage-light' },
+  { id: 'pitch-quest', label: 'Pitch Quest', description: 'Sing Do-Re-Mi-Fa-Sol to guide your character through five musical gates!', icon: Music, color: 'text-sage-deep', bg: 'bg-sage-light' },
+  { id: 'pitch-flyer', label: 'Pitch Flyer', description: 'Sing higher to fly up, lower to dive. Guide your bird through the gaps!', icon: Bird, color: 'text-terracotta-deep', bg: 'bg-terracotta-light' },
   { id: 'harmony-echo', label: 'Harmony Echo', description: 'Sing a phrase back and hear yourself with a harmony layer added on top!', icon: AudioLines, color: 'text-mustard-deep', bg: 'bg-mustard-light' },
 ];
 
