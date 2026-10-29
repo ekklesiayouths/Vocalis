@@ -21,6 +21,9 @@ import { sanitizeText } from '@/lib/validation';
 import { generateLearningMap, COURSES, getCategoryOrder } from '@/lib/learningMapEngine';
 import { saveOnboardingData, completeOnboarding, type OnboardingData, type AssessmentResult } from '@/lib/profileService';
 import type { ProgressSummary } from '@/lib/progressService';
+import { BLUEPRINT_MODULES } from '@/lib/vocalBlueprint';
+import { PitchMatchAssessment } from '@/components/assessment/PitchMatchAssessment';
+import { IntervalAssessment } from '@/components/assessment/IntervalAssessment';
 
 type Step = 'welcome' | 'name' | 'goals' | 'role' | 'experience' | 'skills' | 'notation' | 'instrument' | 'practice' | 'assessment-intro' | 'assessment' | 'generating' | 'done';
 
@@ -79,6 +82,7 @@ export function EnhancedOnboarding({ onComplete }: OnboardingProps) {
   const [practiceDuration, setPracticeDuration] = useState('');
   const [assessmentResults, setAssessmentResults] = useState<Record<string, AssessmentResult>>({});
   const [skipAssessment, setSkipAssessment] = useState(false);
+  const [activeAssessment, setActiveAssessment] = useState<'pitch' | 'interval' | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [generatedMap, setGeneratedMap] = useState<ReturnType<typeof generateLearningMap> | null>(null);
@@ -95,6 +99,11 @@ export function EnhancedOnboarding({ onComplete }: OnboardingProps) {
     const prev = stepOrder[currentStepIndex - 1];
     if (prev) setStep(prev);
   }, [currentStepIndex, stepOrder]);
+
+  const completeAssessment = (skill: string, result: AssessmentResult) => {
+    setAssessmentResults((prev) => ({ ...prev, [skill]: result }));
+    setActiveAssessment(null);
+  };
 
   const toggleArrayItem = (arr: string[], value: string, setter: (v: string[]) => void) => {
     setter(arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]);
@@ -354,38 +363,44 @@ export function EnhancedOnboarding({ onComplete }: OnboardingProps) {
         {/* ASSESSMENT */}
         {step === 'assessment' && (
           <StepCard icon={Gauge} title="Skill Assessment" subtitle="Complete the exercises below. Results are measured, not self-reported.">
-            <div className="flex flex-col gap-3">
-              <div className="rounded-xl bg-sage-light/30 border border-sage-DEFAULT p-4 text-sm text-charcoal-light">
-                <p className="font-medium text-charcoal mb-1">Pitch Matching Assessment</p>
-                <p className="text-xs text-charcoal-muted">Listen to a note and sing it back. We'll measure your pitch accuracy.</p>
-                <button onClick={() => {
-                  setAssessmentResults((prev) => ({
-                    ...prev,
-                    'pitch-accuracy': { module: 'Fine-Tuning Drill', skill: 'pitch-accuracy', accuracy: 75, attempts: 1, level: 'intermediate', source: 'measured' },
-                  }));
-                }} className="btn-secondary text-xs mt-2 px-3 py-2">
-                  <Mic className="h-3.5 w-3.5" /> Start Pitch Matching
-                </button>
-              </div>
-              <div className="rounded-xl bg-cream-200 border border-cream-400 p-4 text-sm text-charcoal-light">
-                <p className="font-medium text-charcoal mb-1">Interval Recognition</p>
-                <p className="text-xs text-charcoal-muted">Listen to two notes and identify the interval.</p>
-                <button onClick={() => {
-                  setAssessmentResults((prev) => ({
-                    ...prev,
-                    'interval-recognition': { module: 'Interval Recognition', skill: 'interval-recognition', accuracy: 60, attempts: 1, level: 'beginner', source: 'measured' },
-                  }));
-                }} className="btn-secondary text-xs mt-2 px-3 py-2">
-                  <Ear className="h-3.5 w-3.5" /> Start Interval Test
-                </button>
-              </div>
-              <p className="text-xs text-charcoal-muted text-center mt-2">
-                {Object.keys(assessmentResults).length > 0
-                  ? `${Object.keys(assessmentResults).length} assessment(s) completed`
-                  : 'No assessments completed yet — that\'s OK!'}
-              </p>
-            </div>
-            <NavButtons onBack={goBack} onNext={handleGenerate} canProceed={true} nextLabel="Generate My Map" />
+            {activeAssessment === 'pitch' && (
+              <PitchMatchAssessment
+                onComplete={(result) => completeAssessment(BLUEPRINT_MODULES.pitch.skill, result)}
+                onCancel={() => setActiveAssessment(null)}
+              />
+            )}
+            {activeAssessment === 'interval' && (
+              <IntervalAssessment
+                onComplete={(result) => completeAssessment(BLUEPRINT_MODULES.ear.skill, result)}
+                onCancel={() => setActiveAssessment(null)}
+              />
+            )}
+            {activeAssessment === null && (
+              <>
+                <div className="flex flex-col gap-3">
+                  <AssessmentCard
+                    icon={Mic}
+                    title="Pitch Matching"
+                    description="Listen to a note and sing it back. We'll measure your pitch accuracy."
+                    result={assessmentResults[BLUEPRINT_MODULES.pitch.skill]}
+                    onStart={() => setActiveAssessment('pitch')}
+                  />
+                  <AssessmentCard
+                    icon={Ear}
+                    title="Interval Recognition"
+                    description="Listen to two notes and tell us whether the second is higher, lower, or the same."
+                    result={assessmentResults[BLUEPRINT_MODULES.ear.skill]}
+                    onStart={() => setActiveAssessment('interval')}
+                  />
+                  <p className="text-xs text-charcoal-muted text-center mt-2">
+                    {Object.keys(assessmentResults).length > 0
+                      ? `${Object.keys(assessmentResults).length} assessment(s) completed`
+                      : 'No assessments completed yet — that\'s OK!'}
+                  </p>
+                </div>
+                <NavButtons onBack={goBack} onNext={handleGenerate} canProceed={true} nextLabel="Generate My Map" />
+              </>
+            )}
           </StepCard>
         )}
 
@@ -463,6 +478,27 @@ function StepCard({ icon: Icon, title, subtitle, children }: { icon: typeof Musi
       </div>
       <p className="text-sm text-charcoal-muted -mt-2">{subtitle}</p>
       {children}
+    </div>
+  );
+}
+
+function AssessmentCard({ icon: Icon, title, description, result, onStart }: {
+  icon: typeof Mic; title: string; description: string; result: AssessmentResult | undefined; onStart: () => void;
+}) {
+  return (
+    <div className="rounded-xl bg-cream-200 border border-cream-400 p-4 text-sm text-charcoal-light">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-charcoal">{title}</p>
+        {result && (
+          <span className="flex items-center gap-1 text-xs font-medium text-sage-deep">
+            <Check className="h-3.5 w-3.5" /> {result.accuracy}%
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-charcoal-muted mt-1">{description}</p>
+      <button onClick={onStart} className="btn-secondary text-xs mt-2 px-3 py-2">
+        <Icon className="h-3.5 w-3.5" /> {result ? 'Retake' : 'Start'}
+      </button>
     </div>
   );
 }
