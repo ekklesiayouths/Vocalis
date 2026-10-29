@@ -32,6 +32,9 @@ export interface AssessmentResult {
   attempts: number;
   level: 'beginner' | 'intermediate' | 'advanced' | 'unassessed';
   source: 'measured' | 'self-reported' | 'estimated';
+  status?: 'completed' | 'skipped';
+  validTrials?: number;
+  completedAt?: string;
 }
 
 export interface LearningMapData {
