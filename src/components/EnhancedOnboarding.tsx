@@ -81,7 +81,6 @@ export function EnhancedOnboarding({ onComplete }: OnboardingProps) {
   const [practiceFrequency, setPracticeFrequency] = useState('');
   const [practiceDuration, setPracticeDuration] = useState('');
   const [assessmentResults, setAssessmentResults] = useState<Record<string, AssessmentResult>>({});
-  const [skipAssessment, setSkipAssessment] = useState(false);
   const [activeAssessment, setActiveAssessment] = useState<'pitch' | 'interval' | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -349,10 +348,10 @@ export function EnhancedOnboarding({ onComplete }: OnboardingProps) {
               We'll only assess skills relevant to your goals.
             </p>
             <div className="flex flex-col gap-2">
-              <button onClick={() => setSkipAssessment(false)} className="btn-primary w-full">
+              <button onClick={() => { setActiveAssessment('pitch'); setStep('assessment'); }} className="btn-primary w-full">
                 <Mic className="h-4 w-4" /> Start Assessment
               </button>
-              <button onClick={() => { setSkipAssessment(true); handleGenerate(); }} className="btn-secondary w-full">
+              <button onClick={() => handleGenerate()} className="btn-secondary w-full">
                 <SkipForward className="h-4 w-4" /> Skip for now
               </button>
             </div>
